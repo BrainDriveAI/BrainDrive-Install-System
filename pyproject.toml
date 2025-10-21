@@ -1,0 +1,12 @@
+[tool.poetry]
+name = 'braindrive-install-system'
+version = '0.0.0'
+description = 'Unified BrainDrive installer and updater'
+
+[tool.poetry.dependencies]
+python = '^3.10'
+
+[build-system]
+requires = ['poetry-core>=1.0.0']
+build-backend = 'poetry.core.masonry.api'
+

@@ -1,0 +1,51 @@
+# BrainDrive Backend Configuration Template
+# This file is used to generate the backend .env file during installation
+
+# Application Settings
+APP_NAME="BrainDrive"
+APP_ENV="production"
+API_V1_PREFIX="/api/v1"
+DEBUG={DEBUG_MODE}
+
+# Server Settings
+HOST="{BACKEND_HOST}"
+PORT={BACKEND_PORT}
+RELOAD=false
+LOG_LEVEL="{LOG_LEVEL}"
+
+# Security
+SECRET_KEY="{SECRET_KEY}"
+ENCRYPTION_MASTER_KEY="{ENCRYPTION_MASTER_KEY}"
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=30
+ALGORITHM="HS256"
+
+# Database
+DATABASE_URL="{DATABASE_PATH}"
+DATABASE_TYPE="sqlite"
+
+# CORS Settings
+CORS_ORIGINS={CORS_ORIGINS}
+CORS_ALLOW_CREDENTIALS=true
+
+# Allowed Hosts
+ALLOWED_HOSTS={ALLOWED_HOSTS}
+
+# File Upload Settings
+MAX_FILE_SIZE={MAX_UPLOAD_SIZE}  # Dynamic size from settings
+UPLOAD_DIR="uploads"
+
+# Logging
+LOG_FILE="logs/braindrive_backend.log"
+LOG_ROTATION="midnight"
+LOG_RETENTION=30
+
+# Performance
+WORKERS={WORKER_COUNT}
+WORKER_CONNECTIONS=1000
+KEEPALIVE=2
+
+# Features
+ENABLE_REGISTRATION={ENABLE_REGISTRATION}
+ENABLE_API_DOCS={ENABLE_API_DOCS}
+ENABLE_METRICS={ENABLE_METRICS}

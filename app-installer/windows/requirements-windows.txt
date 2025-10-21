@@ -1,0 +1,43 @@
+# Core dependencies
+dulwich==0.22.6
+Pillow==11.0.0
+psutil==6.1.0
+Requests==2.32.3
+
+# Platform-specific dependencies
+pywin32==308
+
+# Git operations for BrainDrive repository management
+GitPython==3.1.40
+
+# PyInstaller for executable generation (development dependency)
+pyinstaller>=6.0.0
+pyinstaller-hooks-contrib>=2023.10
+
+# Additional utilities for BrainDrive installer
+packaging>=21.0
+setuptools>=60.0
+wheel>=0.37.0
+
+# Network and HTTP utilities
+urllib3>=1.26.0
+certifi>=2021.10.8
+
+# JSON and configuration handling
+jsonschema>=4.0.0
+
+# Logging and debugging
+colorama>=0.4.4
+tqdm>=4.64.0
+
+# PyInstaller build dependencies
+altgraph>=0.17.3
+pefile>=2023.2.7
+
+# Additional hidden imports support
+importlib-metadata>=4.0.0
+typing-extensions>=4.0.0
+
+# Note: UPX compression is not available as a Python package on Windows
+# If you need UPX compression, install UPX separately from https://upx.github.io/
+# and ensure it's in your PATH before running PyInstaller

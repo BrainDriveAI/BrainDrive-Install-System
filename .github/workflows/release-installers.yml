@@ -1,0 +1,14 @@
+name: release-installers
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo 'Configure matrix build once specs are ready.'
+
