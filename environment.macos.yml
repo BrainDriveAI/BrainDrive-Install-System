@@ -1,0 +1,47 @@
+name: BrainDriveInstaller
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core runtime
+  - python=3.11
+  - pip
+
+  # Tools used by the installer/build
+  - nodejs=20.*
+  - git
+  - setuptools
+  - wheel
+
+  # System libraries commonly needed by Python wheels (Pillow, etc.)
+  - ca-certificates
+  - certifi
+  - openssl
+  - libffi
+  - zlib
+  - bzip2
+  - xz
+  - zstd
+  - icu
+  - sqlite
+  - tk        # tkinter support on macOS
+  - readline
+  - ncurses
+  - expat
+  - tzdata
+  - libpng    # Pillow image codecs
+  - freetype  # Pillow font support
+  - jpeg      # Pillow JPEG support
+  - lcms2     # Pillow color management
+  - libtiff   # Pillow TIFF support
+  - libwebp   # Pillow WebP support
+
+  # Install Python dependencies for both apps via pip
+  - pip:
+      - -r app-installer/macos/requirements-macos.txt
+      - -r installer-updater/macos/requirements-macos.txt
+      # Test tooling parity with Windows export
+      - pytest==8.4.1
+      - pytest-html==4.1.1
+      - pytest-metadata==3.1.1
+      - pygments==2.19.2
