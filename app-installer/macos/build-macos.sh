@@ -71,7 +71,7 @@ echo "✅ PyInstaller installed"
 # Install project requirements
 echo
 echo "🔧 Installing project requirements..."
-pip install -r requirements.txt
+pip install -r requirements-macos.txt
 if [ $? -ne 0 ]; then
     echo "❌ Error: Failed to install project requirements"
     cleanup_and_exit 1

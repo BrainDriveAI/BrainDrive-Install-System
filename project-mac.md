@@ -27,7 +27,7 @@
 ## 4. Build Scripts
 - Create pp-installer/macos/build-macos.sh:
   1. Activate conda env or create Python venv.
-  2. Install shared requirements (pp-installer/common/src/braindrive_installer/requirements.txt).
+  2. Install macOS requirements (app-installer/macos/requirements-macos.txt).
   3. Run PyInstaller spec.
   4. Create DMG: hdiutil create -volname BrainDriveInstaller -srcfolder dist/BrainDriveInstaller.app -ov -format UDZO dist/BrainDriveInstaller-macos-universal.dmg.
   5. Emit prominent warning: "Unsigned build – Gatekeeper will prompt.".

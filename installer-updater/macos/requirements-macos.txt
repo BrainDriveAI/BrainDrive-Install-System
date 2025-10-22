@@ -1,4 +1,5 @@
--r ../common/src/installer_updater/requirements.txt
+# BrainDrive Installer Updater dependencies for macOS
+requests==2.32.3
 pyinstaller>=6.0.0
 pyinstaller-hooks-contrib>=2023.10
 packaging>=21.0

@@ -15,7 +15,6 @@ for %%I in ("%WINDOWS_DIR%\..") do set "REPO_ROOT=%%~fI"
 set "COMMON_DIR=%REPO_ROOT%\common"
 set "SRC_DIR=%COMMON_DIR%\src"
 set "PACKAGE_DIR=%SRC_DIR%\installer_updater"
-set "SHARED_REQUIREMENTS=%PACKAGE_DIR%\requirements.txt"
 set "WINDOWS_REQUIREMENTS=%WINDOWS_DIR%\requirements-windows.txt"
 set "PYTHON_EXEC=python"
 set "USING_CONDA=0"
@@ -62,15 +61,6 @@ set "PYTHONPATH=%SRC_DIR%;%PYTHONPATH%"
 "%PYTHON_EXEC%" -m pip install --upgrade pip
 if errorlevel 1 (
     echo ? Error: Failed to upgrade pip
-    set "EXIT_CODE=1"
-    goto cleanup
-)
-
-echo.
-echo ?? Installing shared requirements...
-"%PYTHON_EXEC%" -m pip install -r "%SHARED_REQUIREMENTS%"
-if errorlevel 1 (
-    echo ? Error: Failed to install shared requirements
     set "EXIT_CODE=1"
     goto cleanup
 )

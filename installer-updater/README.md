@@ -4,14 +4,14 @@ The legacy `InstallerAutoUpdater` sources have been migrated into the unified re
 
 ## Directory Layout
 
-- `common/` – shared Python package (`src/installer_updater/`), configuration templates, and requirements.
+- `common/` - shared Python package (`src/installer_updater/`) and configuration templates.
 - `windows/` – Windows-only PyInstaller spec, icon, and build script.
 - `macos/` / `ubuntu/` – placeholders for future platform builds.
 - `README-legacy.md` – original project documentation retained for reference during refactor.
 
 ## Running the Windows build
 
-1. Ensure dependencies are available with `pip install -r installer-updater/common/src/installer_updater/requirements.txt` (from your active `BrainDriveInstaller` Conda environment).
+1. Ensure dependencies are available with `pip install -r installer-updater/windows/requirements-windows.txt` (from your active `BrainDriveInstaller` Conda environment). Use the per-platform files in `installer-updater/macos/` or `installer-updater/ubuntu/` when building on those systems.
 2. From the repo root, execute `installer-updater/windows/build-windows.bat`. The script reuses an active Conda environment when present, otherwise it spins up a temporary `build_env` virtual environment and runs the `braindrive-installer-updater-windows.spec` recipe.
 3. The generated binary is emitted to `installer-updater/windows/dist/BrainDriveInstallerUpdater-win-x64.exe` alongside a `logs/` directory that captures runtime diagnostics.
 

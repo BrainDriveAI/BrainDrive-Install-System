@@ -17,7 +17,6 @@ set "SRC_DIR=%COMMON_DIR%\src"
 set "PACKAGE_DIR=%SRC_DIR%\braindrive_installer"
 set "MAIN_UI=%PACKAGE_DIR%\ui\main_interface.py"
 set "CREATE_VERSION=%PACKAGE_DIR%\installers\create_version_info.py"
-set "SHARED_REQUIREMENTS=%PACKAGE_DIR%\requirements.txt"
 set "PYTHON_EXEC=python"
 set "USING_CONDA=0"
 
@@ -101,18 +100,6 @@ if errorlevel 1 (
     echo ? Error: Failed to upgrade pip
     set "EXIT_CODE=1"
     goto cleanup
-)
-
-if exist "%SHARED_REQUIREMENTS%" (
-    echo.
-    echo ?? Installing shared BrainDrive installer requirements...
-    "%PYTHON_EXEC%" -m pip install -r "%SHARED_REQUIREMENTS%"
-    if errorlevel 1 (
-        echo ? Error: Failed to install shared requirements
-        set "EXIT_CODE=1"
-        goto cleanup
-    )
-    echo ? Shared requirements installed
 )
 
 echo.
