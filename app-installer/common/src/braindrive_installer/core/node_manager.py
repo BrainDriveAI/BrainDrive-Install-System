@@ -272,6 +272,9 @@ class NodeManager:
             if PlatformUtils.get_os_type() == 'windows':
                 popen_args['creationflags'] = flags_dict.get('creationflags', 0)
                 popen_args['startupinfo'] = flags_dict.get('startupinfo')
+            else:
+                # On Unix, start a new session so we can kill the whole group on Stop
+                popen_args['start_new_session'] = True
             
             # Start the process
             process = subprocess.Popen(dev_command, **popen_args)

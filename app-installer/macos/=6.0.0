@@ -1,0 +1,19 @@
+Collecting pyinstaller
+  Using cached pyinstaller-6.16.0-py3-none-macosx_10_13_universal2.whl.metadata (8.5 kB)
+Collecting altgraph (from pyinstaller)
+  Using cached altgraph-0.17.4-py2.py3-none-any.whl.metadata (7.3 kB)
+Collecting macholib>=1.8 (from pyinstaller)
+  Using cached macholib-1.16.3-py2.py3-none-any.whl.metadata (11 kB)
+Collecting packaging>=22.0 (from pyinstaller)
+  Using cached packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting pyinstaller-hooks-contrib>=2025.8 (from pyinstaller)
+  Using cached pyinstaller_hooks_contrib-2025.9-py3-none-any.whl.metadata (16 kB)
+Requirement already satisfied: setuptools>=42.0.0 in ./build_env/lib/python3.11/site-packages (from pyinstaller) (65.5.0)
+Using cached pyinstaller-6.16.0-py3-none-macosx_10_13_universal2.whl (1.0 MB)
+Using cached macholib-1.16.3-py2.py3-none-any.whl (38 kB)
+Using cached altgraph-0.17.4-py2.py3-none-any.whl (21 kB)
+Using cached packaging-25.0-py3-none-any.whl (66 kB)
+Using cached pyinstaller_hooks_contrib-2025.9-py3-none-any.whl (444 kB)
+Installing collected packages: altgraph, packaging, macholib, pyinstaller-hooks-contrib, pyinstaller
+
+Successfully installed altgraph-0.17.4 macholib-1.16.3 packaging-25.0 pyinstaller-6.16.0 pyinstaller-hooks-contrib-2025.9

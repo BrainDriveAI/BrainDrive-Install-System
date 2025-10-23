@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional
 
 from braindrive_installer.core.installer_state import InstallerState
 from braindrive_installer.core.platform_utils import PlatformUtils
+from braindrive_installer.core.installer_logger import get_installer_logger
 
 class BrainDriveSettingsManager:
     """Manages BrainDrive configuration settings with JSON persistence and template generation."""
@@ -14,6 +15,18 @@ class BrainDriveSettingsManager:
     def __init__(self, installation_path: str):
         self.installation_path = installation_path
         self.settings_file = os.path.join(installation_path, "braindrive_settings.json")
+        # On macOS, avoid writing into the app bundle. Prefer Application Support.
+        try:
+            import sys
+            from pathlib import Path
+            abs_install = os.path.abspath(self.installation_path or "")
+            if sys.platform == "darwin" and ".app/Contents/MacOS" in abs_install:
+                app_support = os.path.join(Path.home(), "Library", "Application Support", "BrainDriveInstaller")
+                os.makedirs(app_support, exist_ok=True)
+                self.settings_file = os.path.join(app_support, "braindrive_settings.json")
+        except Exception:
+            # Best-effort fallback; keep original path
+            pass
         self.backend_env_file = os.path.join(installation_path, "backend", ".env")
         self.frontend_env_file = os.path.join(installation_path, "frontend", ".env")
         self.settings = self._load_settings()
@@ -132,6 +145,9 @@ class BrainDriveSettingsManager:
             return True
         except IOError:
             return False
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
     
     def update_setting(self, category: str, key: str, value: Any) -> bool:
         """Update a specific setting"""
@@ -192,44 +208,185 @@ class BrainDriveSettingsManager:
         return issues
     
     def regenerate_env_files(self) -> bool:
-        """Regenerate .env files from current settings and templates"""
+        """Regenerate .env files using our templates and current settings.
+
+        Behavior:
+        - Prefer generating from braindrive_installer/templates/* to incorporate user settings
+        - Write backend/.env and backend/app/.env; write frontend/.env
+        - If templates cannot be read (e.g., packaging issue), fall back to copying
+          backend/.env-dev -> .env (+ app/.env) and frontend/.env.example -> .env
+        """
+        from pathlib import Path
+        import importlib.resources as ir
+        logger = get_installer_logger()
+
+        def _load_template(name: str) -> tuple[str, str]:
+            """Return (content, error). Try multiple locations robustly under PyInstaller."""
+            candidates_tried = []
+            # 1) importlib.resources from the package
+            try:
+                tpl_pkg = 'braindrive_installer.templates'
+                path = ir.files(tpl_pkg).joinpath(name)
+                # path may be a traversable object; get a filesystem path if possible
+                if hasattr(path, 'is_file') and path.is_file():
+                    content = path.read_text(encoding='utf-8')
+                    if content:
+                        return content, ''
+                else:
+                    fs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'templates', name))
+                    candidates_tried.append(fs_path)
+                    if os.path.isfile(fs_path):
+                        with open(fs_path, 'r', encoding='utf-8') as f:
+                            return f.read(), ''
+            except Exception as e:
+                candidates_tried.append(f"importlib.resources error: {e}")
+
+            # 2) Relative to package root on filesystem
+            try:
+                from pathlib import Path as _P
+                pkg_root = _P(__file__).resolve().parents[1]  # braindrive_installer/
+                fs_path2 = str(pkg_root / 'templates' / name)
+                candidates_tried.append(fs_path2)
+                if os.path.isfile(fs_path2):
+                    with open(fs_path2, 'r', encoding='utf-8') as f:
+                        return f.read(), ''
+            except Exception as e:
+                candidates_tried.append(f"pkg_root error: {e}")
+
+            # 3) PyInstaller resource locations for macOS app bundles
+            try:
+                exe_dir = PlatformUtils.get_executable_directory()
+                if exe_dir:
+                    res_dir = os.path.normpath(os.path.join(exe_dir, '..', 'Resources'))
+                    for rel in [
+                        os.path.join('braindrive_installer', 'templates', name),
+                        os.path.join('templates', name),
+                    ]:
+                        p = os.path.join(res_dir, rel)
+                        candidates_tried.append(p)
+                        if os.path.exists(p):
+                            # Handle previous packaging bug where a directory with the filename was created
+                            if os.path.isdir(p):
+                                nested = os.path.join(p, os.path.basename(p))
+                                if os.path.isfile(nested):
+                                    with open(nested, 'r', encoding='utf-8') as f:
+                                        return f.read(), ''
+                            elif os.path.isfile(p):
+                                with open(p, 'r', encoding='utf-8') as f:
+                                    return f.read(), ''
+                    # Some bundlers keep datas alongside the executable under MacOS/
+                    for rel in [
+                        os.path.join('braindrive_installer', 'templates', name),
+                        os.path.join('templates', name),
+                    ]:
+                        p = os.path.join(exe_dir, rel)
+                        candidates_tried.append(p)
+                        if os.path.exists(p):
+                            if os.path.isdir(p):
+                                nested = os.path.join(p, os.path.basename(p))
+                                if os.path.isfile(nested):
+                                    with open(nested, 'r', encoding='utf-8') as f:
+                                        return f.read(), ''
+                            elif os.path.isfile(p):
+                                with open(p, 'r', encoding='utf-8') as f:
+                                    return f.read(), ''
+            except Exception as e:
+                candidates_tried.append(f"resources error: {e}")
+
+            # 4) PyInstaller MEIPASS search (onefile mode)
+            try:
+                import sys as _sys
+                meipass = getattr(_sys, '_MEIPASS', '')
+                if meipass:
+                    for rel in [
+                        os.path.join('braindrive_installer', 'templates', name),
+                        os.path.join('templates', name),
+                    ]:
+                        p = os.path.join(meipass, rel)
+                        candidates_tried.append(p)
+                        if os.path.isfile(p):
+                            with open(p, 'r', encoding='utf-8') as f:
+                                return f.read(), ''
+            except Exception as e:
+                candidates_tried.append(f"MEIPASS error: {e}")
+
+            return '', f"template {name} not found; tried: {candidates_tried}"
+
         try:
-            # Load templates
-            backend_template_path = os.path.join(os.path.dirname(__file__), "templates", "backend_env_template.txt")
-            frontend_template_path = os.path.join(os.path.dirname(__file__), "templates", "frontend_env_template.txt")
-            
-            # Generate template variables from settings
+            install_path = Path(self.installation_path)
+            logger.info(f"Regenerating env files at: {install_path}")
+            backend_dir = install_path / 'backend'
+            frontend_dir = install_path / 'frontend'
+
+            backend_env = backend_dir / '.env'
+            frontend_env = frontend_dir / '.env'
+
             variables = self._generate_template_variables()
-            
-            # Process backend template
-            if os.path.exists(backend_template_path):
-                with open(backend_template_path, 'r', encoding='utf-8') as f:
-                    backend_content = f.read()
-                
-                for key, value in variables.items():
-                    backend_content = backend_content.replace(f'{{{key}}}', str(value))
-                
-                # Ensure backend directory exists
-                os.makedirs(os.path.dirname(self.backend_env_file), exist_ok=True)
-                with open(self.backend_env_file, 'w', encoding='utf-8') as f:
-                    f.write(backend_content)
-            
-            # Process frontend template
-            if os.path.exists(frontend_template_path):
-                with open(frontend_template_path, 'r', encoding='utf-8') as f:
-                    frontend_content = f.read()
-                
-                for key, value in variables.items():
-                    frontend_content = frontend_content.replace(f'{{{key}}}', str(value))
-                
-                # Ensure frontend directory exists
-                os.makedirs(os.path.dirname(self.frontend_env_file), exist_ok=True)
-                with open(self.frontend_env_file, 'w', encoding='utf-8') as f:
-                    f.write(frontend_content)
-            
+
+            # Try templates first
+            backend_tpl, backend_err = _load_template('backend_env_template.txt')
+            frontend_tpl, frontend_err = _load_template('frontend_env_template.txt')
+            wrote_backend = False
+            wrote_frontend = False
+
+            if backend_tpl:
+                for k, v in variables.items():
+                    backend_tpl = backend_tpl.replace(f'{{{k}}}', str(v))
+                backend_dir.mkdir(parents=True, exist_ok=True)
+                backend_env.write_text(backend_tpl, encoding='utf-8')
+                wrote_backend = True
+                logger.info(f"Created backend .env from template: {backend_env}")
+            else:
+                logger.warning(f"Backend template not used; {backend_err}. Falling back to repo examples/synthesis.")
+
+            if frontend_tpl:
+                for k, v in variables.items():
+                    frontend_tpl = frontend_tpl.replace(f'{{{k}}}', str(v))
+                frontend_dir.mkdir(parents=True, exist_ok=True)
+                frontend_env.write_text(frontend_tpl, encoding='utf-8')
+                wrote_frontend = True
+                logger.info(f"Created frontend .env from template: {frontend_env}")
+            else:
+                logger.warning(f"Frontend template not used; {frontend_err}. Falling back to repo examples/synthesis.")
+
+            # Fallback copy if templates missing/unreadable
+            if not wrote_backend:
+                backend_dev = backend_dir / '.env-dev'
+                if backend_dev.exists():
+                    backend_env.write_text(backend_dev.read_text(encoding='utf-8'), encoding='utf-8')
+                    logger.info(f"Created backend .env by copying .env-dev: {backend_env}")
+                else:
+                    # Minimal synthesized backend env
+                    logger.warning("backend/.env-dev not found; synthesizing backend .env from settings.")
+                    backend_content = (
+                        f"HOST=\"{variables['BACKEND_HOST']}\"\n"
+                        f"PORT={variables['BACKEND_PORT']}\n"
+                        f"LOG_LEVEL=\"{variables['LOG_LEVEL']}\"\n"
+                        f"SECRET_KEY=\"{variables['SECRET_KEY']}\"\n"
+                        f"ENCRYPTION_MASTER_KEY=\"{variables['ENCRYPTION_MASTER_KEY']}\"\n"
+                    )
+                    backend_env.write_text(backend_content, encoding='utf-8')
+                    logger.info(f"Created backend .env by synthesizing from settings: {backend_env}")
+
+            if not wrote_frontend:
+                frontend_example = frontend_dir / '.env.example'
+                if frontend_example.exists():
+                    frontend_env.write_text(frontend_example.read_text(encoding='utf-8'), encoding='utf-8')
+                    logger.info(f"Created frontend .env by copying .env.example: {frontend_env}")
+                else:
+                    logger.warning("frontend/.env.example not found; synthesizing frontend .env from settings.")
+                    api = f"http://{variables['BACKEND_HOST']}:{variables['BACKEND_PORT']}"
+                    frontend_content = (
+                        f"VITE_API_URL={api}\n"
+                        f"VITE_DEV_SERVER_PORT={variables['FRONTEND_PORT']}\n"
+                        f"VITE_DEV_SERVER_HOST={variables['FRONTEND_HOST']}\n"
+                    )
+                    frontend_env.write_text(frontend_content, encoding='utf-8')
+                    logger.info(f"Created frontend .env by synthesizing from settings: {frontend_env}")
+
             return True
         except Exception as e:
-            print(f"Error regenerating env files: {e}")
+            logger.error(f"Error regenerating env files: {e}")
             return False
 
     def _get_existing_env_value(self, env_path: str, key: str) -> Optional[str]:

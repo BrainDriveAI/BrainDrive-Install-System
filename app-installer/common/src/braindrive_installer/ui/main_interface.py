@@ -10,6 +10,7 @@ from braindrive_installer.ui.card_braindrive import BrainDrive
 
 from braindrive_installer.ui.status_display import StatusDisplay
 from braindrive_installer.ui.status_updater import StatusUpdater
+from braindrive_installer.ui.theme import Theme
 import threading
 from braindrive_installer.config.AppConfig import AppConfig
 from braindrive_installer.utils.helper_image import HelperImage
@@ -24,18 +25,35 @@ def main():
     # Create the main window
     root = tk.Tk()
     root.title("BrainDrive Installer [v1.0.0]")
+    Theme.apply(root)
     config = AppConfig()
 
     try:
-
         desktop_integration = AppDesktopIntegration()
         icon_path = desktop_integration.setup_application_icon()
-        root.iconbitmap(icon_path)  
+
+        # On Windows, Tk expects .ico; on macOS use iconphoto with PNG
+        if platform.system() == "Windows":
+            try:
+                root.iconbitmap(icon_path)
+            except Exception:
+                pass
+        else:
+            try:
+                # Prefer PNG from assets for mac/Linux
+                from braindrive_installer.utils.helper_image import HelperImage
+                png_path = HelperImage.get_image_path("braindrive.png")
+                photo = tk.PhotoImage(file=png_path)
+                root.iconphoto(True, photo)
+            except Exception:
+                pass
 
         def background_task():
-            desktop_integration.verify_exe_exists()
-            
-            desktop_integration.verify_and_update_icon()
+            try:
+                desktop_integration.verify_exe_exists()
+                desktop_integration.verify_and_update_icon()
+            except Exception:
+                pass
 
         threading.Thread(target=background_task, daemon=True).start()
 
@@ -62,14 +80,27 @@ def main():
         os_text = f"Using {os_name}"
 
     # Top section
-    top_frame = tk.Frame(root, height=80, bg="lightgrey")
+    if Theme.active:
+        top_frame = tk.Frame(root, height=90, bg=Theme.header_bg)
+    else:
+        top_frame = tk.Frame(root, height=80, bg="lightgrey")
     top_frame.pack(fill=tk.X)
 
-    title_label = tk.Label(top_frame, text="AI System Installer by BrainDrive.ai", font=("Arial", 24), bg="lightgrey")
-    title_label.place(relx=0.5, rely=0.4, anchor="center")
+    title_kwargs = {"text": "AI System Installer by BrainDrive.ai", "font": ("Arial", 24)}
+    if Theme.active:
+        title_kwargs.update(bg=Theme.header_bg, fg=Theme.text)
+    else:
+        title_kwargs.update(bg="lightgrey")
+    title_label = tk.Label(top_frame, **title_kwargs)
+    title_label.place(relx=0.5, rely=0.45, anchor="center")
 
     # New label for "Using Windows 10"
-    os_label = tk.Label(top_frame, text=os_text, font=("Arial", 10), bg="lightgrey")
+    os_label_kwargs = {"text": os_text, "font": ("Arial", 10)}
+    if Theme.active:
+        os_label_kwargs.update(bg=Theme.header_bg, fg=Theme.muted)
+    else:
+        os_label_kwargs.update(bg="lightgrey")
+    os_label = tk.Label(top_frame, **os_label_kwargs)
     os_label.place(relx=0.5, rely=0.8, anchor="center")
 
     # Create card instances
@@ -77,16 +108,25 @@ def main():
     braindrive_instance = BrainDrive()
 
     # Middle section
-    middle_frame = tk.Frame(root, height=320, width=600)
+    middle_kwargs = {"height": 340, "width": 600}
+    if Theme.active:
+        middle_kwargs.update(bg=Theme.bg)
+    middle_frame = tk.Frame(root, **middle_kwargs)
     middle_frame.pack(fill=tk.BOTH, expand=True)
 
     # Left group
-    left_group = tk.Frame(middle_frame, width=400, height=320, relief=tk.RIDGE, bd=2)
+    left_kwargs = {"width": 400, "height": 320, "relief": tk.RIDGE, "bd": 2}
+    if Theme.active:
+        left_kwargs.update(bg=Theme.bg)
+    left_group = tk.Frame(middle_frame, **left_kwargs)
     left_group.pack_propagate(False)
     left_group.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Right group
-    right_group = tk.Frame(middle_frame, width=400, height=320, relief=tk.RIDGE, bd=2)
+    right_kwargs = {"width": 400, "height": 320, "relief": tk.RIDGE, "bd": 2}
+    if Theme.active:
+        right_kwargs.update(bg=Theme.bg)
+    right_group = tk.Frame(middle_frame, **right_kwargs)
     right_group.pack_propagate(False)
     right_group.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 

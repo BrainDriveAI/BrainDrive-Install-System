@@ -27,7 +27,11 @@ class AppConfig:
         """Compute and cache path attributes derived from the base path."""
         self.base_path = base_path
         self.miniconda_path = PlatformUtils.join_paths(self.base_path, "miniconda3")
-        self.env_path = PlatformUtils.join_paths(self.base_path, "BrainDriveInstaller")
+        # Dedicated Python env folder. Avoid collisions with app binary name on macOS.
+        if PlatformUtils.get_os_type() == 'windows':
+            self.env_path = PlatformUtils.join_paths(self.base_path, "BrainDriveInstaller")
+        else:
+            self.env_path = PlatformUtils.join_paths(self.base_path, "bd_env")
 
         # BrainDrive specific paths
         self.repo_path = PlatformUtils.join_paths(self.base_path, "BrainDrive")
@@ -57,10 +61,20 @@ class AppConfig:
                 under_temp = os.path.commonpath([normalized, temp_root]) == temp_root
             except ValueError:
                 under_temp = False
-            if os.path.isdir(normalized) or not under_temp:
+            # On macOS, ignore saved paths that point inside the .app bundle
+            if sys.platform == 'darwin' and '/Contents/MacOS' in normalized:
+                normalized = None
+            if normalized and (os.path.isdir(normalized) or not under_temp):
                 return normalized
 
         executable_dir = PlatformUtils.get_executable_directory()
+        # On macOS when running from an .app bundle, avoid using the bundle directory
+        # as an install destination; prefer the user's home-based path instead.
+        if sys.platform == "darwin" and executable_dir:
+            normalized_exec = os.path.abspath(executable_dir)
+            if "/Contents/MacOS" in normalized_exec or normalized_exec.endswith("/MacOS"):
+                return PlatformUtils.get_braindrive_base_path()
+
         if executable_dir and os.path.isdir(executable_dir):
             return executable_dir
         return PlatformUtils.get_braindrive_base_path()

@@ -85,6 +85,61 @@ class InstallerLogger:
             self.logger.info(f"Environment {var}: {value}")
         
         self.logger.info("=== END SYSTEM INFORMATION ===")
+
+    def log_bundle_resources(self):
+        """Best‑effort dump of where bundled data files live in a macOS app.
+
+        Lists candidate directories for templates and whether env template files
+        are present. Safe to call on any platform.
+        """
+        try:
+            exe_dir = PlatformUtils.get_executable_directory()
+            res_dir = os.path.normpath(os.path.join(exe_dir, '..', 'Resources'))
+            fw_dir = os.path.normpath(os.path.join(exe_dir, '..', 'Frameworks'))
+
+            candidates = [
+                # Next to the executable
+                os.path.join(exe_dir, 'braindrive_installer', 'templates'),
+                os.path.join(exe_dir, 'templates'),
+                # In the Resources subtree
+                os.path.join(res_dir, 'braindrive_installer', 'templates'),
+                os.path.join(res_dir, 'templates'),
+                # Some builds put datas under Frameworks
+                os.path.join(fw_dir, 'braindrive_installer', 'templates'),
+                os.path.join(fw_dir, 'templates'),
+            ]
+
+            self.logger.info("=== BUNDLE DATA SEARCH ===")
+            self.logger.info(f"Executable dir: {exe_dir}")
+            self.logger.info(f"Resources dir:  {res_dir}")
+            self.logger.info(f"Frameworks dir: {fw_dir}")
+
+            target_files = [
+                'backend_env_template.txt',
+                'frontend_env_template.txt',
+            ]
+
+            for d in candidates:
+                if os.path.isdir(d):
+                    try:
+                        entries = sorted(os.listdir(d))
+                        present = [f for f in entries if f in target_files]
+                        self.logger.info(f"FOUND dir: {d} | files: {present}")
+                    except OSError as e:
+                        self.logger.info(f"FOUND dir (unlistable): {d} | error: {e}")
+                else:
+                    self.logger.info(f"MISSING dir: {d}")
+
+            # Also log specific paths we try at runtime
+            for base in [exe_dir, res_dir, fw_dir]:
+                for sub in ('braindrive_installer/templates', 'templates'):
+                    for fname in target_files:
+                        p = os.path.join(base, sub, fname)
+                        self.logger.info(f"CHECK file: {p} | exists={os.path.isfile(p)}")
+
+            self.logger.info("=== END BUNDLE DATA SEARCH ===")
+        except Exception as e:
+            self.logger.info(f"Bundle data probe skipped due to error: {e}")
     
     def log_exception(self, exc_info=None):
         """Log exception with full traceback."""
@@ -103,6 +158,8 @@ def get_installer_logger():
     if _installer_logger is None:
         _installer_logger = InstallerLogger()
         _installer_logger.log_system_info()
+        # Emit a one‑time bundle data report to help debug packaged paths
+        _installer_logger.log_bundle_resources()
     return _installer_logger.get_logger()
 
 def get_log_file_path():

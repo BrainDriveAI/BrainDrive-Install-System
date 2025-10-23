@@ -6,24 +6,40 @@ echo "BrainDrive Installer - macOS Build"
 echo "========================================"
 echo
 
-# Check if Python is available
-if ! command -v python3 &> /dev/null; then
+# Resolve preferred Python (favor active conda env)
+PYTHON_EXEC="$(command -v python || true)"
+if [ -n "$CONDA_PREFIX" ] && [ -x "$CONDA_PREFIX/bin/python" ]; then
+  PYTHON_EXEC="$CONDA_PREFIX/bin/python"
+fi
+if [ -z "$PYTHON_EXEC" ]; then
+  PYTHON_EXEC="$(command -v python3 || true)"
+fi
+if [ -z "$PYTHON_EXEC" ]; then
     echo "❌ Error: Python 3 is not installed"
     echo "Please install Python 3.11 or later and try again."
     exit 1
 fi
 
 echo "✅ Python found"
-python3 --version
+"$PYTHON_EXEC" --version
 
-# Check if we're in the correct directory
-if [ ! -f "main_interface.py" ]; then
-    echo "❌ Error: main_interface.py not found"
-    echo "Please run this script from the BrainDriveInstaller directory"
+# Resolve repo directories relative to this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${SCRIPT_DIR}/.."
+COMMON_DIR="${REPO_ROOT}/common"
+SRC_DIR="${COMMON_DIR}/src"
+PKG_DIR="${SRC_DIR}/braindrive_installer"
+MAIN_SCRIPT="${PKG_DIR}/ui/main_interface.py"
+
+# Validate main script exists
+if [ ! -f "${MAIN_SCRIPT}" ]; then
+    echo "❌ Error: main_interface.py not found at expected path"
+    echo "Looked for: ${MAIN_SCRIPT}"
+    echo "Please ensure the repo structure is intact."
     exit 1
 fi
 
-echo "✅ Found main_interface.py"
+echo "✅ Found main_interface.py at ${MAIN_SCRIPT}"
 
 # Create build environment
 echo
@@ -33,7 +49,7 @@ if [ -d "build_env" ]; then
     rm -rf build_env
 fi
 
-python3 -m venv build_env
+"$PYTHON_EXEC" -m venv build_env
 if [ $? -ne 0 ]; then
     echo "❌ Error: Failed to create virtual environment"
     exit 1
@@ -71,7 +87,7 @@ echo "✅ PyInstaller installed"
 # Install project requirements
 echo
 echo "🔧 Installing project requirements..."
-pip install -r requirements-macos.txt
+pip install -r "${SCRIPT_DIR}/requirements-macos.txt"
 if [ $? -ne 0 ]; then
     echo "❌ Error: Failed to install project requirements"
     cleanup_and_exit 1
@@ -82,12 +98,13 @@ echo "✅ Project requirements installed"
 # Clean previous build
 echo
 echo "🔧 Cleaning previous build..."
-rm -rf build dist __pycache__
+rm -rf "${SCRIPT_DIR}/build" "${SCRIPT_DIR}/dist" "${SCRIPT_DIR}/__pycache__"
 
-# Check for macOS icon file
-if [ ! -f "braindriveai.icns" ]; then
+# Check for macOS icon file in macOS folder
+ICON_FILE="${SCRIPT_DIR}/braindriveai.icns"
+if [ ! -f "${ICON_FILE}" ]; then
     echo "⚠️  Warning: braindriveai.icns not found, using PNG fallback"
-    if [ -f "braindrive.png" ]; then
+    if [ -f "${COMMON_DIR}/assets/braindrive.png" ]; then
         echo "Using braindrive.png as icon"
     else
         echo "❌ Error: No icon file found (braindriveai.icns or braindrive.png)"
@@ -97,29 +114,40 @@ fi
 
 # Build the executable
 echo
-echo "🚀 Building executable..."
+echo "🚀 Building executable (universal2)..."
 echo "This may take several minutes..."
+pushd "${SCRIPT_DIR}" >/dev/null
+
+# Build using the .spec; do not pass makespec-only options like --target-arch
 pyinstaller braindrive-installer-macos.spec --clean --noconfirm
-if [ $? -ne 0 ]; then
+BUILD_STATUS=$?
+popd >/dev/null
+if [ ${BUILD_STATUS} -ne 0 ]; then
     echo "❌ Error: PyInstaller build failed"
     cleanup_and_exit 1
 fi
 
 # Check if build was successful
-if [ -d "dist/BrainDriveInstaller.app" ]; then
+APP_BUNDLE="${SCRIPT_DIR}/dist/BrainDriveInstaller.app"
+DMG_FILE="${SCRIPT_DIR}/dist/BrainDriveInstaller.dmg"
+# Debug: list dist contents to help diagnose missing artifacts
+echo
+echo "📂 Dist contents:"
+ls -la "${SCRIPT_DIR}/dist" || true
+if [ -d "${APP_BUNDLE}" ]; then
     echo
     echo "✅ Build successful!"
-    echo "📁 App bundle created at: dist/BrainDriveInstaller.app"
+    echo "📁 App bundle created at: ${APP_BUNDLE}"
     
     # Get bundle size
-    size=$(du -sh "dist/BrainDriveInstaller.app" | cut -f1)
+    size=$(du -sh "${APP_BUNDLE}" | cut -f1)
     echo "📊 App bundle size: $size"
     
     # Code signing (if certificates are available)
     if [ -n "$CODESIGN_IDENTITY" ]; then
         echo
         echo "🔐 Code signing the application..."
-        codesign --force --verify --verbose --sign "$CODESIGN_IDENTITY" "dist/BrainDriveInstaller.app"
+        codesign --force --verify --verbose --sign "$CODESIGN_IDENTITY" "${APP_BUNDLE}"
         if [ $? -eq 0 ]; then
             echo "✅ Code signing completed!"
         else
@@ -136,26 +164,26 @@ if [ -d "dist/BrainDriveInstaller.app" ]; then
     if command -v create-dmg &> /dev/null; then
         create-dmg \
             --volname "BrainDrive Installer" \
-            --volicon "braindriveai.icns" \
+            $( [ -f "${ICON_FILE}" ] && echo --volicon "${ICON_FILE}" ) \
             --window-pos 200 120 \
             --window-size 600 300 \
             --icon-size 100 \
             --icon "BrainDriveInstaller.app" 175 120 \
             --hide-extension "BrainDriveInstaller.app" \
             --app-drop-link 425 120 \
-            "dist/BrainDriveInstaller.dmg" \
-            "dist/"
+            "${DMG_FILE}" \
+            "${SCRIPT_DIR}/dist/"
         
         if [ $? -eq 0 ]; then
             echo "✅ DMG package created!"
-            dmg_size=$(du -sh "dist/BrainDriveInstaller.dmg" | cut -f1)
+            dmg_size=$(du -sh "${DMG_FILE}" | cut -f1)
             echo "📊 DMG size: $dmg_size"
         else
             echo "⚠️  Warning: DMG creation failed, but app bundle is available"
         fi
     else
         echo "ℹ️  create-dmg not found. Creating simple DMG..."
-        hdiutil create -volname "BrainDrive Installer" -srcfolder "dist/BrainDriveInstaller.app" -ov -format UDZO "dist/BrainDriveInstaller.dmg"
+        hdiutil create -volname "BrainDrive Installer" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_FILE}"
         if [ $? -eq 0 ]; then
             echo "✅ Simple DMG created!"
         else
@@ -165,9 +193,9 @@ if [ -d "dist/BrainDriveInstaller.app" ]; then
     
     echo
     echo "🎉 Build completed successfully!"
-    echo "📁 App bundle: dist/BrainDriveInstaller.app"
-    if [ -f "dist/BrainDriveInstaller.dmg" ]; then
-        echo "📁 DMG package: dist/BrainDriveInstaller.dmg"
+    echo "📁 App bundle: ${APP_BUNDLE}"
+    if [ -f "${DMG_FILE}" ]; then
+        echo "📁 DMG package: ${DMG_FILE}"
     fi
     
 else
@@ -194,9 +222,9 @@ echo
 echo "========================================"
 echo "✅ BUILD COMPLETED SUCCESSFULLY!"
 echo "========================================"
-echo "📁 App bundle: dist/BrainDriveInstaller.app"
-if [ -f "dist/BrainDriveInstaller.dmg" ]; then
-    echo "📁 DMG package: dist/BrainDriveInstaller.dmg"
+echo "📁 App bundle: ${APP_BUNDLE}"
+if [ -f "${DMG_FILE}" ]; then
+    echo "📁 DMG package: ${DMG_FILE}"
 fi
 echo "🚀 Ready for distribution!"
 echo "========================================"

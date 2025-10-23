@@ -7,7 +7,9 @@ import subprocess
 from tkinter import messagebox
 from braindrive_installer.ui.base_card import BaseCard
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
+from braindrive_installer.ui.theme import Theme
 import socket
 from braindrive_installer.ui.ButtonStateManager import ButtonStateManager
 from braindrive_installer.utils.DiskSpaceChecker import DiskSpaceChecker
@@ -128,27 +130,44 @@ class Ollama(BaseCard):
         button_manager = ButtonStateManager()
 
         self.set_parent_frame(parent_frame)
-        card_frame = tk.Frame(parent_frame, relief=tk.GROOVE, bd=2)
+        card_frame = tk.Frame(
+            parent_frame,
+            relief=tk.GROOVE,
+            bd=2,
+            **({"bg": Theme.panel_bg, "highlightbackground": Theme.border, "highlightthickness": 1} if Theme.active else {})
+        )
         card_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         try:
             base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-            image_path = os.path.join(base_path, 'ollama.png')
+            candidates = [
+                os.path.join(base_path, 'ollama.png'),
+                os.path.join(base_path, 'assets', 'ollama.png'),
+            ]
+            image_path = None
+            for c in candidates:
+                if os.path.isfile(c):
+                    image_path = c
+                    break
+            if image_path is None:
+                # Fallback to helper that searches assets and base path
+                from braindrive_installer.utils.helper_image import HelperImage
+                image_path = HelperImage.get_image_path('ollama.png')
             card_image = Image.open(image_path)
             card_image.thumbnail((50, 50))
             card_photo = ImageTk.PhotoImage(card_image)
 
-            ollama_icon = tk.Label(card_frame, image=card_photo)
+            ollama_icon = tk.Label(card_frame, image=card_photo, **({"bg": Theme.panel_bg} if Theme.active else {}))
             ollama_icon.image = card_photo  # Keep a reference
             ollama_icon.place(x=10, y=10)
         except Exception as e:
             print(f"Failed to load the image: {e}")
             # Create a placeholder icon if image loading fails
-            ollama_icon = tk.Label(card_frame, text="🦙", font=("Arial", 20))
+            ollama_icon = tk.Label(card_frame, text="🦙", font=("Arial", 20), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
             ollama_icon.place(x=10, y=10)
 
 
-        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16))
+        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16, "bold"), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
         card_label.place(relx=0.5, y=20, anchor="center")
 
         card_info = tk.Label(
@@ -156,18 +175,28 @@ class Ollama(BaseCard):
             text=self.description,
             font=("Arial", 10),
             wraplength=350,
-            justify="left"
+            justify="left",
+            **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}),
         )
         card_info.place(x=10, y=70)
 
-        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9))
+        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9), **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}))
         size_label.place(x=10, rely=1.0, anchor="sw", y=-10)
 
-        install_button = tk.Button(
-            card_frame,
-            text="Install",
-            command=lambda: self.install(status_updater)
-        )
+        if Theme.active:
+            install_button = ttk.Button(
+                card_frame,
+                text="Install",
+                command=lambda: self.install(status_updater),
+                style="Dark.TButton",
+                width=8,
+            )
+        else:
+            install_button = tk.Button(
+                card_frame,
+                text="Install",
+                command=lambda: self.install(status_updater),
+            )
         install_button.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
         button_manager.register_button("install_ollama", install_button)
 
@@ -182,4 +211,3 @@ class Ollama(BaseCard):
             command=lambda: print(self.get_status())
         )
         # status_button.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)    
-
