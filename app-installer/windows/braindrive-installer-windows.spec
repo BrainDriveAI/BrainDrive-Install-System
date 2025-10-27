@@ -39,6 +39,11 @@ add_directory(COMMON_DIR / 'assets', 'assets')
 add_directory(COMMON_DIR / 'templates', 'templates')
 datas.append((str(PACKAGE_DIR), PACKAGE_NAME))
 
+# Include VERSION file for runtime version detection
+VERSION_FILE = PACKAGE_DIR / 'VERSION'
+if VERSION_FILE.exists():
+    datas.append((str(VERSION_FILE), PACKAGE_NAME))
+
 # Hidden imports routinely required at runtime
 hiddenimports += [
     'tkinter',

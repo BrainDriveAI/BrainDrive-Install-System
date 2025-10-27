@@ -54,6 +54,11 @@ add_directory(COMMON_DIR / 'templates', 'templates')
 # Include package-local templates used at runtime
 add_directory(PACKAGE_DIR / 'templates', f'{PACKAGE_NAME}/templates')
 
+# Include VERSION file for runtime version detection
+VERSION_FILE = PACKAGE_DIR / 'VERSION'
+if VERSION_FILE.exists():
+    datas.append((str(VERSION_FILE), f'{PACKAGE_NAME}'))
+
 # Templates are included by add_directory above; avoid duplicate/conflicting
 # datas entries that target a filename as a directory.
 

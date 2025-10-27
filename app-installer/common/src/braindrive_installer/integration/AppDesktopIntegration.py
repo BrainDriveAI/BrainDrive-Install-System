@@ -25,12 +25,13 @@ class AppDesktopIntegration:
 
         # Platform-specific settings
         if IS_WINDOWS:
-            self.exe_name = "InstallerAutoUpdater.exe"
+            # New unified updater binary and repo location
+            self.exe_name = "BrainDriveInstallerUpdater-win-x64.exe"
             self.icon_name = "braindriveai.ico"
             self.desktop_path = shell.SHGetFolderPath(0, shellcon.CSIDL_DESKTOP, None, 0)
             self.shortcut_name = "Open WebUI Installer.lnk"
             self.repo_url = (
-                "https://github.com/BrainDriveAI/InstallerAutoUpdater/releases/latest/download/InstallerAutoUpdater.exe"
+                "https://github.com/DJJones66/BrainDrive-Install-System/releases/latest/download/BrainDriveInstallerUpdater-win-x64.exe"
             )
         else:
             # macOS/Linux: no Windows updater exe or .lnk shortcuts
