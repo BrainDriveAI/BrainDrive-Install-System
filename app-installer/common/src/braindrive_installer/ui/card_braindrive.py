@@ -192,7 +192,11 @@ class BrainDrive(BaseCard):
         """
         def start_servers_task():
             button_manager = ButtonStateManager()
-            button_manager.disable_buttons("start_braindrive")
+            button_manager.disable_buttons([
+                "start_braindrive",
+                "settings_braindrive",
+                "update_braindrive",
+            ])
             
             try:
                 # Refresh runtime settings from installer in case ports or hosts changed

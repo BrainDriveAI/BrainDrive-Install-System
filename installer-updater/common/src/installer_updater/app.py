@@ -38,7 +38,7 @@ class InstallerAutoUpdater:
     """Checks GitHub releases for a newer installer and launches it."""
 
     DEFAULT_BASE_ENV = "BRAINDRIVE_INSTALLER_HOME"
-    DEFAULT_REPO_URL = "https://github.com/BrainDriveAI/OpenWebUI_CondaInstaller"
+    DEFAULT_REPO_URL = "https://github.com/DJJones66/BrainDrive-Install-System"
 
     ASSET_NAMES = {
         "win32": ["BrainDriveInstaller-win-x64.exe", "BrainDriveInstaller.exe", "OpenWebUIInstaller.exe"],
@@ -69,6 +69,10 @@ class InstallerAutoUpdater:
         env_override = os.environ.get(self.DEFAULT_BASE_ENV)
         if env_override:
             return Path(env_override)
+        exe_path = Path(sys.argv[0]).resolve()
+        exe_dir = exe_path.parent
+        if exe_dir.exists():
+            return exe_dir
         return Path.home() / "BrainDriveInstaller" / "updater"
 
     def _default_binary_name(self) -> str:

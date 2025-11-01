@@ -72,7 +72,7 @@ def health_check():
         with open(os.path.join(self.mock_frontend_path, "package.json"), "w") as f:
             f.write("""{
   "name": "braindrive-frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
@@ -94,7 +94,7 @@ def health_check():
         with open(os.path.join(plugins_path, "package.json"), "w") as f:
             f.write("""{
   "name": "test-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "build": "echo 'Building plugin'"
   }

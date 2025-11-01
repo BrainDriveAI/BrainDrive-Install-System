@@ -36,7 +36,7 @@ def main():
     
     # Create the main window
     root = tk.Tk()
-    root.title("BrainDrive Installer [v1.0.0]")
+    root.title("BrainDrive Installer [v1.0.1]")
     Theme.apply(root)
     config = AppConfig()
 
@@ -254,7 +254,7 @@ def _get_current_installer_version() -> str:
         pass
 
     # Windows: as a simple cross-platform fallback, return default embedded string
-    return "1.0.0"
+    return "1.0.1"
 
 
 def _get_latest_release_version() -> str:

@@ -53,7 +53,7 @@ class BrainDriveSettingsManager:
     def _get_default_settings(self) -> Dict[str, Any]:
         """Get default settings configuration"""
         return {
-            "version": "1.0.0",
+            "version": "1.0.1",
             "last_modified": datetime.utcnow().isoformat() + "Z",
             "network": {
                 "backend_host": "localhost",
