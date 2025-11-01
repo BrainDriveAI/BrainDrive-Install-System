@@ -31,7 +31,7 @@ class AppDesktopIntegration:
             self.desktop_path = shell.SHGetFolderPath(0, shellcon.CSIDL_DESKTOP, None, 0)
             self.shortcut_name = "Open WebUI Installer.lnk"
             self.repo_url = (
-                "https://github.com/DJJones66/BrainDrive-Install-System/releases/latest/download/BrainDriveInstallerUpdater-win-x64.exe"
+                "https://github.com/BrainDriveAI/BrainDrive-Install-System/releases/latest/download/BrainDriveInstallerUpdater-win-x64.exe"
             )
         else:
             # macOS/Linux: no Windows updater exe or .lnk shortcuts

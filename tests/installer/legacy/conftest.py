@@ -48,7 +48,7 @@ def sample_package_json():
     """Sample package.json content for testing."""
     return {
         "name": "test-plugin",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "scripts": {
             "build": "npm run build:prod",
             "build:prod": "webpack --mode production"
@@ -96,7 +96,7 @@ def mock_git_repo():
         
         # Create package.json
         with open(os.path.join(frontend_path, "package.json"), "w") as f:
-            f.write('{"name": "test-frontend", "version": "1.0.1"}')
+            f.write('{"name": "test-frontend", "version": "1.0.2"}')
         
         return repo_path
     

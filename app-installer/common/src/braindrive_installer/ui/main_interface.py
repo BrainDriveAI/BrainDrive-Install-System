@@ -36,7 +36,7 @@ def main():
     
     # Create the main window
     root = tk.Tk()
-    root.title("BrainDrive Installer [v1.0.1]")
+    root.title("BrainDrive Installer [v1.0.2]")
     Theme.apply(root)
     config = AppConfig()
 
@@ -254,15 +254,15 @@ def _get_current_installer_version() -> str:
         pass
 
     # Windows: as a simple cross-platform fallback, return default embedded string
-    return "1.0.1"
+    return "1.0.2"
 
 
 def _get_latest_release_version() -> str:
     url = os.environ.get("BRAINDRIVE_INSTALLER_RELEASES")
     if not url:
-        repo = os.environ.get("BRAINDRIVE_INSTALLER_REPO", "https://github.com/DJJones66/BrainDrive-Install-System")
+        repo = os.environ.get("BRAINDRIVE_INSTALLER_REPO", "https://github.com/BrainDriveAI/BrainDrive-Install-System")
         parts = repo.rstrip("/").split("/")
-        owner_repo = "/".join(parts[-2:]) if len(parts) >= 2 else "DJJones66/BrainDrive-Install-System"
+        owner_repo = "/".join(parts[-2:]) if len(parts) >= 2 else "BrainDriveAI/BrainDrive-Install-System"
         url = f"https://api.github.com/repos/{owner_repo}/releases/latest"
     try:
         resp = requests.get(url, timeout=15)
@@ -342,7 +342,7 @@ def _launch_linux_updater() -> None:
 
 
 def _open_releases_page() -> None:
-    repo = os.environ.get("BRAINDRIVE_INSTALLER_REPO", "https://github.com/DJJones66/BrainDrive-Install-System")
+    repo = os.environ.get("BRAINDRIVE_INSTALLER_REPO", "https://github.com/BrainDriveAI/BrainDrive-Install-System")
     url = repo.rstrip("/") + "/releases/latest"
     try:
         import webbrowser

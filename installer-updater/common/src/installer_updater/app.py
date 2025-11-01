@@ -38,7 +38,7 @@ class InstallerAutoUpdater:
     """Checks GitHub releases for a newer installer and launches it."""
 
     DEFAULT_BASE_ENV = "BRAINDRIVE_INSTALLER_HOME"
-    DEFAULT_REPO_URL = "https://github.com/DJJones66/BrainDrive-Install-System"
+    DEFAULT_REPO_URL = "https://github.com/BrainDriveAI/BrainDrive-Install-System"
 
     ASSET_NAMES = {
         "win32": ["BrainDriveInstaller-win-x64.exe", "BrainDriveInstaller.exe", "OpenWebUIInstaller.exe"],
