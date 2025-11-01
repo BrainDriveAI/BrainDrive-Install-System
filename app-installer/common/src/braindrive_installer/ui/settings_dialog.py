@@ -2,6 +2,7 @@ import os
 import socket
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from braindrive_installer.ui.theme import Theme
 from typing import Callable
 from braindrive_installer.ui.settings_manager import BrainDriveSettingsManager
 
@@ -25,6 +26,14 @@ class BrainDriveSettingsDialog:
         self.dialog.resizable(True, True)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
+
+        # Apply mac dark theme to match main UI
+        if Theme.active:
+            try:
+                Theme.apply(self.dialog)
+                self.dialog.configure(bg=Theme.bg)
+            except Exception:
+                pass
         
         # Center the dialog
         self.dialog.update_idletasks()
@@ -38,31 +47,40 @@ class BrainDriveSettingsDialog:
     def _create_widgets(self):
         """Create all dialog widgets"""
         # Main content frame
-        main_frame = ttk.Frame(self.dialog)
+        main_frame = ttk.Frame(self.dialog) if not Theme.active else ttk.Frame(self.dialog, style="Dark.TFrame")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
         
         # Button frame at the bottom of dialog (not inside main_frame)
-        button_frame = ttk.Frame(self.dialog)
+        button_frame = ttk.Frame(self.dialog) if not Theme.active else ttk.Frame(self.dialog, style="Dark.TFrame")
         button_frame.pack(fill=tk.X, padx=10, pady=10)
         
         # Add buttons with better spacing
-        reset_btn = ttk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults)
+        reset_btn = ttk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults,
+                               style=("Dark.TButton" if Theme.active else None))
         reset_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        cancel_btn = ttk.Button(button_frame, text="Cancel", command=self._cancel)
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=self._cancel,
+                                style=("Dark.TButton" if Theme.active else None))
         cancel_btn.pack(side=tk.RIGHT, padx=(5, 0))
         
-        apply_btn = ttk.Button(button_frame, text="Apply & Save", command=self._apply_settings)
+        apply_btn = ttk.Button(button_frame, text="Apply & Save", command=self._apply_settings,
+                               style=("Dark.TButton" if Theme.active else None))
         apply_btn.pack(side=tk.RIGHT, padx=(5, 5))
         
         # Notebook for tabbed sections
-        notebook = ttk.Notebook(main_frame)
+        notebook = ttk.Notebook(main_frame) if not Theme.active else ttk.Notebook(main_frame, style="Dark.TNotebook")
         notebook.pack(fill=tk.BOTH, expand=True)
 
-        install_tab = ttk.Frame(notebook, padding=10)
-        network_tab = ttk.Frame(notebook, padding=10)
-        security_tab = ttk.Frame(notebook, padding=10)
-        advanced_tab = ttk.Frame(notebook, padding=10)
+        if Theme.active:
+            install_tab = ttk.Frame(notebook, padding=10, style="Dark.TFrame")
+            network_tab = ttk.Frame(notebook, padding=10, style="Dark.TFrame")
+            security_tab = ttk.Frame(notebook, padding=10, style="Dark.TFrame")
+            advanced_tab = ttk.Frame(notebook, padding=10, style="Dark.TFrame")
+        else:
+            install_tab = ttk.Frame(notebook, padding=10)
+            network_tab = ttk.Frame(notebook, padding=10)
+            security_tab = ttk.Frame(notebook, padding=10)
+            advanced_tab = ttk.Frame(notebook, padding=10)
 
         notebook.add(install_tab, text="Installation")
         notebook.add(network_tab, text="Network")
@@ -70,47 +88,62 @@ class BrainDriveSettingsDialog:
         notebook.add(advanced_tab, text="Advanced")
 
         # Installation tab
-        ttk.Label(install_tab, text="Install Location:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5))
-        self.widgets['install_path'] = ttk.Entry(install_tab, width=45)
+        (ttk.Label(install_tab, text="Install Location:",
+                   style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=0, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)))
+        self.widgets['install_path'] = ttk.Entry(install_tab, width=45,
+                                                 style=("Dark.TEntry" if Theme.active else None))
         self.widgets['install_path'].grid(row=0, column=1, sticky=tk.W+tk.E, padx=(0, 5), pady=(0, 5))
 
-        browse_btn = ttk.Button(install_tab, text="Browse…", command=self._browse_install_path)
+        browse_btn = ttk.Button(install_tab, text="Browse…", command=self._browse_install_path,
+                                style=("Dark.TButton" if Theme.active else None))
         browse_btn.grid(row=0, column=2, sticky=tk.E, pady=(0, 5))
         self.widgets['install_browse'] = browse_btn
 
         install_help = ttk.Label(
             install_tab,
             text="Used when installing BrainDrive. Changes apply on the next installation.",
-            foreground="gray"
+            foreground=(Theme.muted if Theme.active else "gray"),
+            style=("Dark.TLabel" if Theme.active else None)
         )
         install_help.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
 
         install_tab.columnconfigure(1, weight=1)
 
         # Network tab
-        ttk.Label(network_tab, text="Backend Host:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        self.widgets['backend_host'] = ttk.Entry(network_tab, width=20)
+        (ttk.Label(network_tab, text="Backend Host:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=0, column=0, sticky=tk.W, padx=(0, 5)))
+        self.widgets['backend_host'] = ttk.Entry(network_tab, width=20,
+                                                 style=("Dark.TEntry" if Theme.active else None))
         self.widgets['backend_host'].grid(row=0, column=1, padx=(0, 20))
         
-        ttk.Label(network_tab, text="Port:").grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
-        self.widgets['backend_port'] = ttk.Entry(network_tab, width=8)
+        (ttk.Label(network_tab, text="Port:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=0, column=2, sticky=tk.W, padx=(0, 5)))
+        self.widgets['backend_port'] = ttk.Entry(network_tab, width=8,
+                                                 style=("Dark.TEntry" if Theme.active else None))
         self.widgets['backend_port'].grid(row=0, column=3)
         
-        ttk.Label(network_tab, text="Frontend Host:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
-        self.widgets['frontend_host'] = ttk.Entry(network_tab, width=20)
+        (ttk.Label(network_tab, text="Frontend Host:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0)))
+        self.widgets['frontend_host'] = ttk.Entry(network_tab, width=20,
+                                                  style=("Dark.TEntry" if Theme.active else None))
         self.widgets['frontend_host'].grid(row=1, column=1, padx=(0, 20), pady=(5, 0))
         
-        ttk.Label(network_tab, text="Port:").grid(row=1, column=2, sticky=tk.W, padx=(0, 5), pady=(5, 0))
-        self.widgets['frontend_port'] = ttk.Entry(network_tab, width=8)
+        (ttk.Label(network_tab, text="Port:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=1, column=2, sticky=tk.W, padx=(0, 5), pady=(5, 0)))
+        self.widgets['frontend_port'] = ttk.Entry(network_tab, width=8,
+                                                  style=("Dark.TEntry" if Theme.active else None))
         self.widgets['frontend_port'].grid(row=1, column=3, pady=(5, 0))
 
         # Port status indicators
-        backend_status = ttk.Frame(network_tab)
+        backend_status = ttk.Frame(network_tab) if not Theme.active else ttk.Frame(network_tab, style="Dark.TFrame")
         backend_status.grid(row=0, column=4, sticky=tk.W)
-        backend_canvas = tk.Canvas(backend_status, width=14, height=14, highlightthickness=0)
+        backend_canvas = tk.Canvas(backend_status, width=14, height=14, highlightthickness=0,
+                                   bg=(Theme.panel_bg if Theme.active else None))
         backend_canvas.pack(side=tk.LEFT)
         backend_circle = backend_canvas.create_oval(2, 2, 12, 12, fill="#9e9e9e", outline="")
-        backend_label = ttk.Label(backend_status, text="Checking...", width=10)
+        backend_label = ttk.Label(backend_status, text="Checking...", width=10,
+                                  style=("Dark.TLabel" if Theme.active else None))
         backend_label.pack(side=tk.LEFT, padx=(4, 0))
         self.port_indicators['backend'] = {
             'canvas': backend_canvas,
@@ -118,12 +151,14 @@ class BrainDriveSettingsDialog:
             'label': backend_label,
         }
 
-        frontend_status = ttk.Frame(network_tab)
+        frontend_status = ttk.Frame(network_tab) if not Theme.active else ttk.Frame(network_tab, style="Dark.TFrame")
         frontend_status.grid(row=1, column=4, sticky=tk.W, pady=(5, 0))
-        frontend_canvas = tk.Canvas(frontend_status, width=14, height=14, highlightthickness=0)
+        frontend_canvas = tk.Canvas(frontend_status, width=14, height=14, highlightthickness=0,
+                                    bg=(Theme.panel_bg if Theme.active else None))
         frontend_canvas.pack(side=tk.LEFT)
         frontend_circle = frontend_canvas.create_oval(2, 2, 12, 12, fill="#9e9e9e", outline="")
-        frontend_label = ttk.Label(frontend_status, text="Checking...", width=10)
+        frontend_label = ttk.Label(frontend_status, text="Checking...", width=10,
+                                   style=("Dark.TLabel" if Theme.active else None))
         frontend_label.pack(side=tk.LEFT, padx=(4, 0))
         self.port_indicators['frontend'] = {
             'canvas': frontend_canvas,
@@ -137,37 +172,53 @@ class BrainDriveSettingsDialog:
 
         # Security tab
         self.widgets['enable_registration'] = tk.BooleanVar()
-        ttk.Checkbutton(security_tab, text="Enable Registration", variable=self.widgets['enable_registration']).grid(row=0, column=0, sticky=tk.W)
+        ttk.Checkbutton(security_tab, text="Enable Registration", variable=self.widgets['enable_registration'],
+                        style=("Dark.TCheckbutton" if Theme.active else None)).grid(row=0, column=0, sticky=tk.W)
         
         self.widgets['enable_api_docs'] = tk.BooleanVar()
-        ttk.Checkbutton(security_tab, text="Enable API Docs", variable=self.widgets['enable_api_docs']).grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        ttk.Checkbutton(security_tab, text="Enable API Docs", variable=self.widgets['enable_api_docs'],
+                        style=("Dark.TCheckbutton" if Theme.active else None)).grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
         
         self.widgets['enable_metrics'] = tk.BooleanVar()
-        ttk.Checkbutton(security_tab, text="Enable Metrics", variable=self.widgets['enable_metrics']).grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        ttk.Checkbutton(security_tab, text="Enable Metrics", variable=self.widgets['enable_metrics'],
+                        style=("Dark.TCheckbutton" if Theme.active else None)).grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
         
         self.widgets['debug_mode'] = tk.BooleanVar()
-        ttk.Checkbutton(security_tab, text="Debug Mode", variable=self.widgets['debug_mode']).grid(row=1, column=1, sticky=tk.W, padx=(20, 0), pady=(5, 0))
+        ttk.Checkbutton(security_tab, text="Debug Mode", variable=self.widgets['debug_mode'],
+                        style=("Dark.TCheckbutton" if Theme.active else None)).grid(row=1, column=1, sticky=tk.W, padx=(20, 0), pady=(5, 0))
         
         # Advanced tab
-        ttk.Label(advanced_tab, text="Database Path:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        self.widgets['database_path'] = ttk.Entry(advanced_tab, width=40)
+        (ttk.Label(advanced_tab, text="Database Path:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=0, column=0, sticky=tk.W, padx=(0, 5)))
+        self.widgets['database_path'] = ttk.Entry(advanced_tab, width=40,
+                                                  style=("Dark.TEntry" if Theme.active else None))
         self.widgets['database_path'].grid(row=0, column=1, columnspan=2, sticky=tk.W+tk.E, padx=(0, 5))
         
-        ttk.Label(advanced_tab, text="Log Level:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
-        self.widgets['log_level'] = ttk.Combobox(advanced_tab, width=15, values=["debug", "info", "warning", "error"], state="readonly")
+        (ttk.Label(advanced_tab, text="Log Level:", style=("Dark.TLabel" if Theme.active else None))
+         .grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0)))
+        self.widgets['log_level'] = ttk.Combobox(advanced_tab, width=15,
+                                                 values=["debug", "info", "warning", "error"], state="readonly",
+                                                 style=("Dark.TCombobox" if Theme.active else None))
         self.widgets['log_level'].grid(row=1, column=1, pady=(5, 0))
         
         advanced_tab.columnconfigure(1, weight=1)
         
         # Status frame
-        status_frame = ttk.LabelFrame(main_frame, text="Status", padding=10)
+        status_frame = ttk.LabelFrame(main_frame, text="Status", padding=10,
+                                      style=("Dark.TLabelframe" if Theme.active else None))
         status_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.widgets['status_label'] = ttk.Label(status_frame, text="✓ Settings valid", foreground="green")
+        if Theme.active:
+            self.widgets['status_label'] = ttk.Label(status_frame, text="✓ Settings valid", style="DarkSuccess.TLabel")
+        else:
+            self.widgets['status_label'] = ttk.Label(status_frame, text="✓ Settings valid", foreground="green")
         self.widgets['status_label'].pack(anchor=tk.W)
         
         # Warning label
-        self.widgets['warning_label'] = ttk.Label(status_frame, text="⚠ Warning: Changing ports requires restart", foreground="orange")
+        if Theme.active:
+            self.widgets['warning_label'] = ttk.Label(status_frame, text="⚠ Warning: Changing ports requires restart", style="DarkWarning.TLabel")
+        else:
+            self.widgets['warning_label'] = ttk.Label(status_frame, text="⚠ Warning: Changing ports requires restart", foreground="orange")
         self.widgets['warning_label'].pack(anchor=tk.W)
         
         

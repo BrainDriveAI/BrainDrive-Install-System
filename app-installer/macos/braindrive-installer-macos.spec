@@ -1,32 +1,68 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import sys
 import os
+import sys
+import importlib
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-# Collect all data files and hidden imports
+# Resolve key paths relative to this spec file
+SPEC_PATH = Path(globals().get("__file__", sys.argv[0])).resolve()
+BASE_DIR = SPEC_PATH.parent
+REPO_ROOT = BASE_DIR.parent
+COMMON_DIR = REPO_ROOT / 'common'
+SRC_DIR = COMMON_DIR / 'src'
+PACKAGE_NAME = 'braindrive_installer'
+PACKAGE_DIR = SRC_DIR / PACKAGE_NAME
+
+# Ensure the package is importable during analysis
+sys.path.append(str(SRC_DIR))
+importlib.import_module(PACKAGE_NAME)
+
 datas = []
 hiddenimports = []
 
-# Add Tkinter data files
+# Tkinter / Pillow runtime assets
 datas += collect_data_files('tkinter')
-
-# Add PIL/Pillow data files
 datas += collect_data_files('PIL')
 
-# Add application assets
-datas += [
-    ('braindriveai.icns', '.'),
-    ('braindrive.png', '.'),
-    ('braindrive_small.png', '.'),
-    ('templates/*', 'templates'),
-]
+# Helper to add full directory trees (assets, templates, etc.)
+def add_directory(source: Path, target_root: str) -> None:
+    if not source.exists():
+        return
+    for file_path in source.rglob('*'):
+        if file_path.is_file():
+            relative = file_path.relative_to(source)
+            # Destination in PyInstaller 'datas' must be a DIRECTORY, not a filename.
+            # Place each file under '<target_root>/<relative.parent>' so assets aren't
+            # turned into directories named like the file (which breaks lookups).
+            dest_dir = str((Path(target_root) / relative.parent).as_posix())
+            datas.append((str(file_path), dest_dir))
 
-# Add assets directory if it exists
-if os.path.exists('assets'):
-    datas += [('assets/*', 'assets')]
+# Package-specific assets
+ICNS_PATH = BASE_DIR / 'braindriveai.icns'
+PNG_ICON = COMMON_DIR / 'assets' / 'braindrive.png'
+SMALL_PNG = COMMON_DIR / 'assets' / 'braindrive_small.png'
 
-# Hidden imports for common issues
+if PNG_ICON.exists():
+    datas.append((str(PNG_ICON), '.'))
+if SMALL_PNG.exists():
+    datas.append((str(SMALL_PNG), '.'))
+
+add_directory(COMMON_DIR / 'assets', 'assets')
+add_directory(COMMON_DIR / 'templates', 'templates')
+# Include package-local templates used at runtime
+add_directory(PACKAGE_DIR / 'templates', f'{PACKAGE_NAME}/templates')
+
+# Include VERSION file for runtime version detection
+VERSION_FILE = PACKAGE_DIR / 'VERSION'
+if VERSION_FILE.exists():
+    datas.append((str(VERSION_FILE), f'{PACKAGE_NAME}'))
+
+# Templates are included by add_directory above; avoid duplicate/conflicting
+# datas entries that target a filename as a directory.
+
+# Hidden imports routinely required at runtime
 hiddenimports += [
     'tkinter',
     'tkinter.ttk',
@@ -70,31 +106,40 @@ hiddenimports += [
 # Hidden imports for conda/git operations
 hiddenimports += collect_submodules('dulwich')
 hiddenimports += collect_submodules('git')
+hiddenimports = list(dict.fromkeys(hiddenimports + collect_submodules(PACKAGE_NAME)))
 
-# Add our application modules
-hiddenimports += [
-    'platform_utils',
-    'AppConfig',
-    'base_installer',
-    'base_card',
-    'git_manager',
-    'node_manager',
-    'plugin_builder',
-    'process_manager',
-    'installer_braindrive',
-    'card_braindrive',
-    'card_ollama',
-    'ButtonStateManager',
-    'status_display',
-    'status_spinner',
-    'status_updater',
-    'DiskSpaceChecker',
-    'AppDesktopIntegration',
+# Application package modules that PyInstaller must bundle
+package_modules = [
+    'core.platform_utils',
+    'core.base_installer',
+    'core.git_manager',
+    'core.installer_logger',
+    'core.installer_state',
+    'core.node_manager',
+    'core.plugin_builder',
+    'core.process_manager',
+    'config.AppConfig',
+    'integration.AppDesktopIntegration',
+    'ui.base_card',
+    'ui.ButtonStateManager',
+    'ui.card_braindrive',
+    'ui.card_ollama',
+    'ui.main_interface',
+    'ui.settings_dialog',
+    'ui.settings_manager',
+    'ui.status_display',
+    'ui.status_spinner',
+    'ui.status_updater',
+    'utils.DiskSpaceChecker',
+    'utils.helper_image',
 ]
+hiddenimports += [f'{PACKAGE_NAME}.{module}' for module in package_modules]
+
+MAIN_SCRIPT = str(PACKAGE_DIR / 'ui' / 'main_interface.py')
 
 a = Analysis(
-    ['main_interface.py'],
-    pathex=[],
+    [MAIN_SCRIPT],
+    pathex=[str(SRC_DIR)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -123,6 +168,9 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+ICON_FILE = str(ICNS_PATH) if ICNS_PATH.exists() else None
+TARGET_ARCH = os.environ.get('PYI_TARGET_ARCH') or None
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -136,7 +184,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=TARGET_ARCH,
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -149,13 +197,13 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='BrainDriveInstaller',
+    name='BrainDriveInstaller_collected',
 )
 
 app = BUNDLE(
     coll,
     name='BrainDriveInstaller.app',
-    icon='braindriveai.icns',
+    icon=ICON_FILE,
     bundle_identifier='ai.braindrive.installer',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
@@ -164,8 +212,8 @@ app = BUNDLE(
         'NSHighResolutionCapable': 'True',
         'LSMinimumSystemVersion': '10.14.0',
         'NSRequiresAquaSystemAppearance': 'No',
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': '1.0.1',
+        'CFBundleVersion': '1.0.1',
         'CFBundleDisplayName': 'BrainDrive Installer',
         'CFBundleName': 'BrainDriveInstaller',
         'CFBundleExecutable': 'BrainDriveInstaller',

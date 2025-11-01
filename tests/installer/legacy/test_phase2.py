@@ -123,7 +123,7 @@ class TestNodeManager(unittest.TestCase):
         # Create a test package.json
         package_data = {
             "name": "test-package",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "scripts": {
                 "build": "echo 'building'",
                 "dev": "echo 'dev server'"
@@ -138,7 +138,7 @@ class TestNodeManager(unittest.TestCase):
         
         self.assertTrue(exists)
         self.assertEqual(package_info["name"], "test-package")
-        self.assertEqual(package_info["version"], "1.0.0")
+        self.assertEqual(package_info["version"], "1.0.1")
         self.assertIn("build", package_info["scripts"])
     
     def test_check_node_modules_exists_missing(self):
@@ -222,7 +222,7 @@ class TestPluginBuilder(unittest.TestCase):
         # Create package.json for the plugin
         package_data = {
             "name": "test-plugin",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "scripts": {
                 "build": "echo 'building plugin'"
             }

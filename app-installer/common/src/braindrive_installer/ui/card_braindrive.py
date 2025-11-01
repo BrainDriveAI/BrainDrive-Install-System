@@ -10,7 +10,8 @@ from braindrive_installer.integration.AppDesktopIntegration import AppDesktopInt
 from braindrive_installer.ui.ButtonStateManager import ButtonStateManager
 from braindrive_installer.ui.base_card import BaseCard
 import tkinter as tk
-from PIL import Image, ImageTk
+from tkinter import ttk
+from PIL import Image, ImageTk, Image
 import threading
 from braindrive_installer.installers.installer_miniconda import MinicondaInstaller
 from braindrive_installer.installers.installer_braindrive import BrainDriveInstaller
@@ -18,6 +19,7 @@ from braindrive_installer.utils.DiskSpaceChecker import DiskSpaceChecker
 from braindrive_installer.core.installer_logger import get_installer_logger
 from braindrive_installer.ui.settings_manager import BrainDriveSettingsManager
 from braindrive_installer.ui.settings_dialog import BrainDriveSettingsDialog
+from braindrive_installer.ui.theme import Theme
 from urllib.parse import urlparse
 
 class BrainDrive(BaseCard):
@@ -160,8 +162,11 @@ class BrainDrive(BaseCard):
                     desktop_integration = AppDesktopIntegration()
 
                     def background_task():
-                        desktop_integration.verify_exe_exists()
-                        desktop_integration.verify_and_update_icon()
+                        try:
+                            desktop_integration.verify_exe_exists()
+                            desktop_integration.verify_and_update_icon()
+                        except Exception:
+                            pass
 
                     threading.Thread(target=background_task, daemon=True).start()
 
@@ -187,7 +192,11 @@ class BrainDrive(BaseCard):
         """
         def start_servers_task():
             button_manager = ButtonStateManager()
-            button_manager.disable_buttons("start_braindrive")
+            button_manager.disable_buttons([
+                "start_braindrive",
+                "settings_braindrive",
+                "update_braindrive",
+            ])
             
             try:
                 # Refresh runtime settings from installer in case ports or hosts changed
@@ -413,15 +422,18 @@ class BrainDrive(BaseCard):
         services_running = status['backend_running'] or status['frontend_running']
         
         if status['installed']:
+            # Installed: hide Install button; allow Update
+            button_manager.disable_buttons("install_braindrive")
+            button_manager.enable_buttons("update_braindrive")
             if services_running:
                 # Services are running - enable the toggle button as "Stop BrainDrive"
                 self.logger.info("Services are running - enabling start button as 'Stop BrainDrive', disabling separate stop button")
                 button_manager.enable_buttons(["start_braindrive"])  # Keep the toggle button enabled
                 button_manager.disable_buttons(["stop_braindrive", "settings_braindrive"])  # Disable separate stop button and settings
                 
-                # Update toggle button text to "Stop BrainDrive"
+                # Update toggle button text to compact label on macOS
                 try:
-                    button_manager.set_button_text("start_braindrive", "Stop BrainDrive")
+                    button_manager.set_button_text("start_braindrive", "Stop" if Theme.active else "Stop BrainDrive")
                 except Exception as e:
                     self.logger.warning(f"Could not update start button text: {e}")
 
@@ -432,16 +444,13 @@ class BrainDrive(BaseCard):
                 button_manager.enable_buttons(["start_braindrive", "settings_braindrive"])  # Enable toggle button and settings
                 button_manager.disable_buttons("stop_braindrive")  # Disable separate stop button
                 
-                # Update toggle button text to "Start BrainDrive"
+                # Update toggle button text
                 try:
-                    button_manager.set_button_text("start_braindrive", "Start BrainDrive")
+                    button_manager.set_button_text("start_braindrive", "Start" if Theme.active else "Start BrainDrive")
                 except Exception as e:
                     self.logger.warning(f"Could not update start button text: {e}")
             
-            if services_running:
-                button_manager.disable_buttons("update_braindrive")
-            else:
-                button_manager.enable_buttons("update_braindrive")
+            # Update stays enabled for installed scenario
         else:
             # Not installed
             self.logger.info("BrainDrive not installed - enabling install and settings buttons")
@@ -521,15 +530,25 @@ class BrainDrive(BaseCard):
         """
         self.set_parent_frame(parent_frame)
 
-        card_frame = tk.Frame(parent_frame, relief=tk.GROOVE, bd=2)
+        frame_kwargs = dict(parent_frame=parent_frame)
+        card_frame = tk.Frame(
+            parent_frame,
+            relief=tk.GROOVE,
+            bd=2,
+            **({"bg": Theme.panel_bg, "highlightbackground": Theme.border, "highlightthickness": 1} if Theme.active else {})
+        )
         card_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Load BrainDrive icon
         try:
             base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-            # Try to load braindrive.png, fallback to braindriveai.ico
-            image_path = os.path.join(base_path, 'braindrive.png')
-            if not os.path.exists(image_path):
+            # Try to load braindrive.png from base or assets, fallback to ico
+            img_candidates = [
+                os.path.join(base_path, 'braindrive.png'),
+                os.path.join(base_path, 'assets', 'braindrive.png'),
+            ]
+            image_path = next((p for p in img_candidates if os.path.isfile(p)), None)
+            if image_path is None:
                 image_path = os.path.join(base_path, 'braindriveai.ico')
             card_image = Image.open(image_path)
         except Exception as e:
@@ -540,11 +559,11 @@ class BrainDrive(BaseCard):
         card_image.thumbnail((50, 50))
         card_photo = ImageTk.PhotoImage(card_image)
 
-        card_icon = tk.Label(card_frame, image=card_photo)
+        card_icon = tk.Label(card_frame, image=card_photo, **({"bg": Theme.panel_bg} if Theme.active else {}))
         card_icon.image = card_photo  # Keep a reference
         card_icon.place(x=10, y=10)
 
-        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16))
+        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16, "bold"), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
         card_label.place(relx=0.5, y=20, anchor="center")
 
         card_info = tk.Label(
@@ -552,15 +571,17 @@ class BrainDrive(BaseCard):
             text=self.description,
             font=("Arial", 10),
             wraplength=350,
-            justify="left"
+            justify="left",
+            **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}),
         )
         card_info.place(x=10, y=70)
 
-        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9))
-        size_label.place(x=10, rely=1.0, anchor="sw", y=-10)
+        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9), **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}))
+        size_label.place(x=10, rely=1.0, anchor="sw", y=-48)
 
-        button_container = tk.Frame(card_frame)
-        button_container.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
+        # Bottom button bar spanning the width to avoid clipping
+        button_container = tk.Frame(card_frame, **({"bg": Theme.panel_bg} if Theme.active else {}))
+        button_container.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
 
         # Initialize components
         disk_checker = DiskSpaceChecker()
@@ -569,8 +590,20 @@ class BrainDrive(BaseCard):
         self.braindrive_installer.set_status_updater(status_updater)
 
         # Update button (packed first so it remains right-most)
-        update_button = tk.Button(button_container, text="Update", command=lambda: self.update(status_updater))
-        update_button.pack(side="right", padx=(5, 0))
+        def mkbtn(text, cmd):
+            if Theme.active:
+                return ttk.Button(
+                    button_container,
+                    text=text,
+                    command=cmd,
+                    style="Dark.TButton",
+                    width=8,
+                )
+            else:
+                return tk.Button(button_container, text=text, command=cmd)
+
+        update_button = mkbtn("Update", lambda: self.update(status_updater))
+        update_button.pack(side="right", padx=(4, 0))
         update_button.config(state="disabled")
         button_manager.register_button("update_braindrive", update_button)
 
@@ -586,26 +619,27 @@ class BrainDrive(BaseCard):
             # Note: The actual button text update happens in _update_button_states()
             # which is called at the end of start_server() and stop_server()
 
-        start_stop_button = tk.Button(button_container, text="Start BrainDrive", command=toggle_server)
-        start_stop_button.pack(side="right", padx=(5, 0))
+        start_label = "Start" if Theme.active else "Start BrainDrive"
+        start_stop_button = mkbtn(start_label, toggle_server)
+        start_stop_button.pack(side="right", padx=(4, 0))
         start_stop_button.config(state="disabled")
         button_manager.register_button("start_braindrive", start_stop_button)
 
         # Install button
-        install_button = tk.Button(button_container, text="Install", command=lambda: self.install(status_updater))
-        install_button.pack(side="right", padx=(5, 0))
+        install_button = mkbtn("Install", lambda: self.install(status_updater))
+        install_button.pack(side="right", padx=(4, 0))
         install_button.config(state="disabled")
         button_manager.register_button("install_braindrive", install_button)
 
         # Settings button
-        settings_button = tk.Button(button_container, text="Settings", command=self.open_settings_dialog)
-        settings_button.pack(side="right", padx=(5, 0))
+        settings_button = mkbtn("Settings", self.open_settings_dialog)
+        settings_button.pack(side="right", padx=(4, 0))
         settings_button.config(state="disabled")
         button_manager.register_button("settings_braindrive", settings_button)
 
         # Stop button (separate from start for clarity)
-        stop_button = tk.Button(card_frame, text="Stop", command=lambda: self.stop_server(status_updater))
-        stop_button.place(relx=1.0, rely=1.0, anchor="se", x=-70, y=-40)
+        stop_button = mkbtn("Stop", lambda: self.stop_server(status_updater))
+        stop_button.place(relx=1.0, rely=1.0, anchor="se", x=-80, y=-48)
         stop_button.place_forget()
         stop_button.config(state="disabled")
         button_manager.register_button("stop_braindrive", stop_button)
@@ -614,7 +648,7 @@ class BrainDrive(BaseCard):
         if self.braindrive_installer.check_installed():
             status = self.get_status()
             if status['backend_running'] or status['frontend_running']:
-                start_stop_button.config(text="Stop BrainDrive")
+                start_stop_button.config(text=("Stop" if Theme.active else "Stop BrainDrive"))
                 # Update status display with current service URLs
                 status_updater.update_status(
                     "BrainDrive Services Started",
@@ -622,7 +656,7 @@ class BrainDrive(BaseCard):
                     100
                 )
             else:
-                start_stop_button.config(text="Start BrainDrive")
+                start_stop_button.config(text=("Start" if Theme.active else "Start BrainDrive"))
                 # Update status display
                 status_updater.update_status(
                     "BrainDrive Ready",
