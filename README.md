@@ -139,7 +139,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 ## Links
 
 - [BrainDrive Core](https://github.com/BrainDriveAI/BrainDrive-Core)
-- [Documentation](https://docs.braindriveai.ai)
+- [Documentation](https://docs.braindrive.ai)
 - [Community Forum](https://community.braindrive.ai)
 - [Releases](https://github.com/BrainDriveAI/BrainDrive-Install-System/releases)
 
