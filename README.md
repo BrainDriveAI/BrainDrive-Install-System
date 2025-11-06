@@ -20,12 +20,10 @@ BrainDrive Installer is a cross-platform GUI application that automates the comp
 1. **Download** the installer for your OS from [GitHub Releases](https://github.com/BrainDriveAI/BrainDrive-Install-System/releases)
    - Windows: `BrainDriveInstaller-win-x64.exe`
    - macOS: `BrainDriveInstaller-macos-universal.dmg`
-   - Linux: `BrainDriveInstaller.AppImage` or `.tar.gz`
 
 2. **Run** the installer
    - **Windows**: Double-click the `.exe` (you may need to bypass SmartScreen)
    - **macOS**: Right-click the app and select "Open" (required for unsigned apps)
-   - **Linux**: Make executable with `chmod +x` and run
 
 3. **Install** by clicking "Install BrainDrive" and following on-screen prompts
 
@@ -115,11 +113,6 @@ See our [Contributing Guide](https://docs.braindrive.ai/core/CONTRIBUTING) for d
 - Currently unsigned—use Right-click → Open on first launch
 - Supports both Intel and Apple Silicon
 
-**Linux**
-- Requires GUI environment (X11 or compatible)
-- Make binary executable: `chmod +x BrainDriveInstaller.AppImage`
-- No root privileges required
-
 ## Troubleshooting
 
 | Issue | Solution |
@@ -128,7 +121,6 @@ See our [Contributing Guide](https://docs.braindrive.ai/core/CONTRIBUTING) for d
 | Package install fails | Run `pip install --upgrade pip` and retry |
 | Module not found | Verify environment is activated: `conda activate BrainDriveInstaller` |
 | macOS won't open app | Use Right-click → Open (required for unsigned apps) |
-| Linux permission denied | Run `chmod +x BrainDriveInstaller.AppImage` |
 
 For more help, visit [community.braindrive.ai](https://community.braindrive.ai)
 
