@@ -4,7 +4,7 @@
 
 One-click setup for your [BrainDrive](https://BrainDrive.ai) self-hosted AI platform. 
 
-BrainDrive Installer is a cross-platform GUI application that automates the complete setup of BrainDrive and provides 1-click update from GUI. It handles all dependency installation, environment configuration, and service management—so you can get your BrainDrive running in minutes.
+BrainDrive Installer is a cross-platform GUI application that automates the complete setup of BrainDrive and provides 1-click updated. It handles all dependency installation, environment configuration, and service management—so you can get your BrainDrive running in minutes.
 
 ## What It Does
 
