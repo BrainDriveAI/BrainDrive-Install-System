@@ -53,6 +53,14 @@ class PlatformUtils:
             str: Platform-appropriate base path
         """
         home = PlatformUtils.get_home_directory()
+        os_type = PlatformUtils.get_os_type()
+        if os_type == 'windows':
+            program_files = os.getenv("PROGRAMFILES")
+            if program_files:
+                return str(Path(program_files) / "BrainDrive")
+            return str(home / "BrainDrive")
+        if os_type == 'macos':
+            return str(home / "Applications" / "BrainDrive")
         return str(home / "BrainDrive")
     
     @staticmethod

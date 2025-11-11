@@ -2,6 +2,8 @@ import tkinter as tk
 from threading import Thread
 import time
 
+from braindrive_installer.ui.theme import Theme
+
 class StatusSpinner:
     def __init__(self, parent, step_label):
         """
@@ -11,10 +13,15 @@ class StatusSpinner:
         """
         self.parent = parent
         self.step_label = step_label
-        self.spinner_label = tk.Label(parent, text="", font=("Arial", 12), bg="lightgrey")
+        label_kwargs = {"text": "", "font": ("Arial", 12, "bold")}
+        if Theme.active:
+            label_kwargs.update(bg=Theme.panel_bg, fg=Theme.accent)
+        else:
+            label_kwargs.update(bg="lightgrey", fg="black")
+        self.spinner_label = tk.Label(parent, **label_kwargs)
         self.active = False
         self.symbols = ["|", "/", "-", "\\"]
-        self.colors = ["black", "black", "black", "black"]
+        self.colors = [Theme.accent, Theme.accent_soft, Theme.accent, Theme.accent_soft] if Theme.active else ["black"] * 4
 
     def start(self):
         """Starts the spinner animation and repositions the step label."""

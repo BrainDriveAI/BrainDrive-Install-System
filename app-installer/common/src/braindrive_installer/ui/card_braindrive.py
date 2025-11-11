@@ -12,7 +12,9 @@ from braindrive_installer.ui.base_card import BaseCard
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk, Image
+from io import BytesIO
 import threading
+from importlib import resources
 from braindrive_installer.installers.installer_miniconda import MinicondaInstaller
 from braindrive_installer.installers.installer_braindrive import BrainDriveInstaller
 from braindrive_installer.utils.DiskSpaceChecker import DiskSpaceChecker
@@ -20,7 +22,9 @@ from braindrive_installer.core.installer_logger import get_installer_logger
 from braindrive_installer.ui.settings_manager import BrainDriveSettingsManager
 from braindrive_installer.ui.settings_dialog import BrainDriveSettingsDialog
 from braindrive_installer.ui.theme import Theme
+from braindrive_installer.utils.helper_image import HelperImage
 from urllib.parse import urlparse
+from pathlib import Path
 
 class BrainDrive(BaseCard):
     """
@@ -31,7 +35,7 @@ class BrainDrive(BaseCard):
     def __init__(self):
         super().__init__(
             name="BrainDrive",
-            description="Advanced AI platform with React frontend and FastAPI backend. Features dual server architecture with plugin system.",
+            description="BrainDrive is the MIT Licensed open source AI System you own, control, and build on.",
             size="8.5"
         )
         self.backend_running = False
@@ -45,11 +49,27 @@ class BrainDrive(BaseCard):
         self.frontend_port = self.braindrive_installer.frontend_port
         self.backend_host = self.braindrive_installer.backend_host
         self.frontend_host = self.braindrive_installer.frontend_host
+        self.helper_text = (
+            "Once installed, the BrainDrive icon will be added to your desktop. "
+            "Click the icon to start, stop, and update your BrainDrive."
+        )
 
     def install(self, status_updater=None):
         """
         Install BrainDrive, ensuring prerequisites like Miniconda are installed.
         """
+        status_display = getattr(self.config, "status_display", None)
+
+        def _set_step_state(step_key, state):
+            try:
+                if status_display:
+                    status_display.set_step_state(step_key, state)
+            except Exception:
+                pass
+
+        if status_display:
+            status_display.reset_step_states()
+
         def installation_task():
             self.logger.info("Starting BrainDrive installation process")
             button_manager = ButtonStateManager()
@@ -58,15 +78,36 @@ class BrainDrive(BaseCard):
                 "install_braindrive",
                 "update_braindrive"
             ])
+
+            disk_checker = DiskSpaceChecker()
             
             try:
-                # Ensure Miniconda is installed first
-                self.logger.info("Checking Miniconda prerequisite")
+                has_space = disk_checker.has_enough_space(self.size)
                 if status_updater:
                     status_updater.update_status(
-                        "Step: [1/3] Installing Miniconda...",
-                        "Installing Python environment manager.",
-                        10,
+                        "Checking system prerequisites",
+                        "Validating install path, disk space, and required permissions.",
+                        5 if has_space else 0,
+                    )
+                _set_step_state("checking", "active")
+                if not has_space:
+                    _set_step_state("checking", "error")
+                    if status_updater:
+                        status_updater.update_status(
+                            "Not enough free space",
+                            f"BrainDrive needs {self.size} GB of free space before installation can begin.",
+                            0,
+                        )
+                    return
+
+                # Ensure Miniconda is installed first
+                self.logger.info("Checking Miniconda prerequisite")
+                _set_step_state("dependencies", "active")
+                if status_updater:
+                    status_updater.update_status(
+                        "Installing dependencies",
+                        "Setting up Miniconda and the BrainDrive runtime environment.",
+                        35,
                     )
                 
                 miniconda_installer = MinicondaInstaller(status_updater)
@@ -76,23 +117,27 @@ class BrainDrive(BaseCard):
                 # Check if Miniconda installation is successful
                 if not miniconda_installer.check_installed():
                     self.logger.error("Miniconda installation failed - cannot proceed with BrainDrive installation")
+                    _set_step_state("dependencies", "error")
                     if status_updater:
                         status_updater.update_status(
-                            "Error: Miniconda Installation Failed.",
-                            "Cannot proceed with BrainDrive installation.",
+                            "Dependency installation failed",
+                            "Miniconda could not be installed. Check your connection and try again.",
                             0,
                         )
                     return
                 else:
                     self.logger.info("Miniconda installation successful")
+                    _set_step_state("checking", "complete")
+                    _set_step_state("dependencies", "complete")
 
                 # Proceed with BrainDrive installation
                 self.logger.info("Starting BrainDrive installation")
+                _set_step_state("installing", "active")
                 if status_updater:
                     status_updater.update_status(
-                        "Step: [2/3] Installing BrainDrive...",
-                        "Setting up BrainDrive AI platform.",
-                        50,
+                        "Installing BrainDrive",
+                        "Cloning BrainDrive Core, installing services, and generating shortcuts.",
+                        75,
                     )
                 
                 self.braindrive_installer.set_status_updater(status_updater)
@@ -105,14 +150,16 @@ class BrainDrive(BaseCard):
                     
                     if success:
                         self.logger.info("BrainDrive installation completed successfully")
+                        _set_step_state("installing", "complete")
                         if status_updater:
                             status_updater.update_status(
-                                "Installation Complete.",
-                                "BrainDrive installed successfully! You can now start the services.",
+                                "Installation complete",
+                                "BrainDrive installed successfully. Use Start to launch services or Settings to tweak ports.",
                                 100,
                             )
                     else:
                         self.logger.error("BrainDrive installation failed - installer returned False")
+                        _set_step_state("installing", "error")
                         if status_updater:
                             status_updater.update_status(
                                 "Error: Installation Failed.",
@@ -124,6 +171,7 @@ class BrainDrive(BaseCard):
                 except Exception as e:
                     error_msg = str(e)
                     self.logger.exception(f"Exception during BrainDrive installation: {error_msg}")
+                    _set_step_state("installing", "error")
                     if status_updater:
                         status_updater.update_status(
                             "Error: Installation Failed.",
@@ -150,7 +198,6 @@ class BrainDrive(BaseCard):
                     if self.braindrive_installer.check_installed():
                         button_manager.enable_buttons("start_braindrive")
                         button_manager.enable_buttons("update_braindrive")
-                        button_manager.enable_buttons("settings_braindrive")
                     else:
                         button_manager.enable_buttons("install_braindrive")
                 except Exception as e:
@@ -194,7 +241,6 @@ class BrainDrive(BaseCard):
             button_manager = ButtonStateManager()
             button_manager.disable_buttons([
                 "start_braindrive",
-                "settings_braindrive",
                 "update_braindrive",
             ])
             
@@ -429,7 +475,7 @@ class BrainDrive(BaseCard):
                 # Services are running - enable the toggle button as "Stop BrainDrive"
                 self.logger.info("Services are running - enabling start button as 'Stop BrainDrive', disabling separate stop button")
                 button_manager.enable_buttons(["start_braindrive"])  # Keep the toggle button enabled
-                button_manager.disable_buttons(["stop_braindrive", "settings_braindrive"])  # Disable separate stop button and settings
+                button_manager.disable_buttons(["stop_braindrive"])  # Disable separate stop button
                 
                 # Update toggle button text to compact label on macOS
                 try:
@@ -441,7 +487,7 @@ class BrainDrive(BaseCard):
             else:
                 # Services are stopped - enable the toggle button as "Start BrainDrive"
                 self.logger.info("Services are stopped - enabling start button as 'Start BrainDrive', disabling separate stop button")
-                button_manager.enable_buttons(["start_braindrive", "settings_braindrive"])  # Enable toggle button and settings
+                button_manager.enable_buttons(["start_braindrive"])  # Enable toggle button
                 button_manager.disable_buttons("stop_braindrive")  # Disable separate stop button
                 
                 # Update toggle button text
@@ -454,7 +500,7 @@ class BrainDrive(BaseCard):
         else:
             # Not installed
             self.logger.info("BrainDrive not installed - enabling install and settings buttons")
-            button_manager.enable_buttons(["install_braindrive", "settings_braindrive"])
+            button_manager.enable_buttons(["install_braindrive"])
             button_manager.disable_buttons(["start_braindrive", "stop_braindrive", "update_braindrive"])
 
     def _refresh_runtime_settings(self):
@@ -529,59 +575,160 @@ class BrainDrive(BaseCard):
         Display the BrainDrive card UI within the given Tkinter frame.
         """
         self.set_parent_frame(parent_frame)
+        card_bg = Theme.panel_bg_alt if Theme.active else "white"
+        border_color = Theme.border if Theme.active else "#d9d9d9"
+        text_color = Theme.text if Theme.active else "black"
+        muted_color = Theme.muted if Theme.active else "#4a4a4a"
 
-        frame_kwargs = dict(parent_frame=parent_frame)
         card_frame = tk.Frame(
             parent_frame,
-            relief=tk.GROOVE,
-            bd=2,
-            **({"bg": Theme.panel_bg, "highlightbackground": Theme.border, "highlightthickness": 1} if Theme.active else {})
+            bg=card_bg,
+            highlightbackground=border_color,
+            highlightthickness=1,
+            bd=0,
+            relief=tk.FLAT,
         )
-        card_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        card_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        card_frame.pack_propagate(False)
 
-        # Load BrainDrive icon
-        try:
-            base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-            # Try to load braindrive.png from base or assets, fallback to ico
-            img_candidates = [
-                os.path.join(base_path, 'braindrive.png'),
-                os.path.join(base_path, 'assets', 'braindrive.png'),
-            ]
-            image_path = next((p for p in img_candidates if os.path.isfile(p)), None)
-            if image_path is None:
-                image_path = os.path.join(base_path, 'braindriveai.ico')
-            card_image = Image.open(image_path)
-        except Exception as e:
-            print(f"Failed to load BrainDrive image: {e}")
-            # Create a placeholder image
-            card_image = Image.new('RGB', (50, 50), color='blue')
-        
-        card_image.thumbnail((50, 50))
-        card_photo = ImageTk.PhotoImage(card_image)
+        def _resolve_icon_path(name: str):
+            try:
+                data_path = resources.files("braindrive_installer") / "assets" / name
+                with resources.as_file(data_path) as handle:
+                    return handle
+            except Exception:
+                pass
+            candidates = []
+            try:
+                helper_path = HelperImage.get_image_path(name)
+                candidates.append(Path(helper_path))
+            except Exception:
+                pass
+            base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+            candidates.extend(
+                [
+                    base_dir / name,
+                    base_dir / "assets" / name,
+                    Path(__file__).resolve().parents[4] / "assets" / name,
+                ]
+            )
+            for candidate in candidates:
+                if candidate and candidate.exists():
+                    return candidate
+            return None
 
-        card_icon = tk.Label(card_frame, image=card_photo, **({"bg": Theme.panel_bg} if Theme.active else {}))
-        card_icon.image = card_photo  # Keep a reference
-        card_icon.place(x=10, y=10)
+        def _load_icon():
+            img = None
+            try:
+                asset_path = resources.files("braindrive_installer") / "assets" / "braindrive.png"
+                with asset_path.open("rb") as data:
+                    img = Image.open(BytesIO(data.read())).convert("RGBA")
+                self.logger.debug(f"Loaded BrainDrive icon from packaged assets: {asset_path}")
+            except Exception as exc:
+                self.logger.debug(f"Packaged BrainDrive icon load failed: {exc}")
 
-        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16, "bold"), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
-        card_label.place(relx=0.5, y=20, anchor="center")
+            if img is None:
+                path = _resolve_icon_path("braindrive.png")
+                if path:
+                    try:
+                        img = Image.open(path).convert("RGBA")
+                        self.logger.debug(f"Loaded BrainDrive icon from {path}")
+                    except Exception as exc:
+                        self.logger.warning(f"BrainDrive icon at {path} failed to load: {exc}")
 
-        card_info = tk.Label(
-            card_frame,
+            if img is None:
+                placeholder_path = Path(__file__).resolve().parents[4] / "common" / "assets" / "braindrive.png"
+                if placeholder_path.exists():
+                    try:
+                        img = Image.open(placeholder_path).convert("RGBA")
+                        self.logger.debug(f"Loaded fallback icon from common assets: {placeholder_path}")
+                    except Exception as exc:
+                        self.logger.warning(f"Fallback BrainDrive icon load failed: {exc}")
+
+            if img is None:
+                self.logger.warning("Falling back to generated placeholder BrainDrive icon.")
+                img = Image.new("RGBA", (64, 64), color=Theme.accent if Theme.active else "#4a90e2")
+
+            img.thumbnail((64, 64), Image.LANCZOS)
+            return ImageTk.PhotoImage(img)
+
+        header = tk.Frame(card_frame, bg=card_bg)
+        header.pack(fill=tk.X, padx=22, pady=(18, 10))
+        card_photo = _load_icon()
+        icon_label = tk.Label(header, image=card_photo, bg=card_bg)
+        icon_label.image = card_photo
+        icon_label.pack(side=tk.LEFT, padx=(0, 14))
+
+        title_block = tk.Frame(header, bg=card_bg)
+        title_block.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(
+            title_block,
+            text=self.name,
+            font=("Arial", 20, "bold"),
+            bg=card_bg,
+            fg=text_color,
+        ).pack(anchor="w")
+        tk.Label(
+            title_block,
+            text="Dual-server AI platform runner",
+            font=("Arial", 11),
+            bg=card_bg,
+            fg=muted_color,
+        ).pack(anchor="w")
+
+        copy_frame = tk.Frame(card_frame, bg=card_bg)
+        copy_frame.pack(fill=tk.X, padx=30, pady=(0, 8))
+        description_label = tk.Label(
+            copy_frame,
             text=self.description,
-            font=("Arial", 10),
-            wraplength=350,
+            font=("Arial", 11),
             justify="left",
-            **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}),
+            bg=card_bg,
+            fg=text_color,
+            anchor="w",
         )
-        card_info.place(x=10, y=70)
+        description_label.pack(fill=tk.X, anchor="w")
+        helper_label = tk.Label(
+            copy_frame,
+            text=self.helper_text,
+            font=("Arial", 10),
+            justify="left",
+            bg=card_bg,
+            fg=muted_color,
+            anchor="w",
+        )
+        helper_label.pack(fill=tk.X, anchor="w", pady=(8, 0))
 
-        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9), **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}))
-        size_label.place(x=10, rely=1.0, anchor="sw", y=-48)
+        def _update_wrap(event=None):
+            try:
+                available = max(320, card_frame.winfo_width() - 60)
+                description_label.config(wraplength=available)
+                helper_label.config(wraplength=available)
+            except Exception:
+                pass
 
-        # Bottom button bar spanning the width to avoid clipping
-        button_container = tk.Frame(card_frame, **({"bg": Theme.panel_bg} if Theme.active else {}))
-        button_container.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
+        card_frame.bind("<Configure>", _update_wrap)
+        copy_frame.bind("<Configure>", _update_wrap)
+        card_frame.after(0, _update_wrap)
+
+        spacer = tk.Frame(card_frame, bg=card_bg)
+        spacer.pack(fill=tk.BOTH, expand=True)
+
+        meta_frame = tk.Frame(card_frame, bg=card_bg)
+        meta_frame.pack(fill=tk.X, padx=30, pady=(10, 4))
+        tk.Label(
+            meta_frame,
+            text=f"Size: {self.size} GB",
+            font=("Arial", 10, "bold"),
+            bg=card_bg,
+            fg=muted_color,
+        ).pack(side=tk.LEFT)
+
+        # Bottom button bar
+        button_container = tk.Frame(card_frame, bg=card_bg)
+        button_container.pack(side=tk.BOTTOM, fill=tk.X, padx=30, pady=10)
+        button_row = tk.Frame(button_container, bg=card_bg)
+        button_row.pack(fill=tk.X, anchor="w", pady=(6, 0))
 
         # Initialize components
         disk_checker = DiskSpaceChecker()
@@ -589,21 +736,19 @@ class BrainDrive(BaseCard):
         # Use shared installer instance
         self.braindrive_installer.set_status_updater(status_updater)
 
-        # Update button (packed first so it remains right-most)
         def mkbtn(text, cmd):
             if Theme.active:
                 return ttk.Button(
-                    button_container,
+                    button_row,
                     text=text,
                     command=cmd,
                     style="Dark.TButton",
-                    width=8,
                 )
             else:
-                return tk.Button(button_container, text=text, command=cmd)
+                return tk.Button(button_row, text=text, command=cmd)
 
         update_button = mkbtn("Update", lambda: self.update(status_updater))
-        update_button.pack(side="right", padx=(4, 0))
+        update_button.pack(side=tk.LEFT, padx=6)
         update_button.config(state="disabled")
         button_manager.register_button("update_braindrive", update_button)
 
@@ -621,25 +766,19 @@ class BrainDrive(BaseCard):
 
         start_label = "Start" if Theme.active else "Start BrainDrive"
         start_stop_button = mkbtn(start_label, toggle_server)
-        start_stop_button.pack(side="right", padx=(4, 0))
+        start_stop_button.pack(side=tk.LEFT, padx=6)
         start_stop_button.config(state="disabled")
         button_manager.register_button("start_braindrive", start_stop_button)
 
         # Install button
         install_button = mkbtn("Install", lambda: self.install(status_updater))
-        install_button.pack(side="right", padx=(4, 0))
+        install_button.pack(side=tk.LEFT, padx=6)
         install_button.config(state="disabled")
         button_manager.register_button("install_braindrive", install_button)
 
-        # Settings button
-        settings_button = mkbtn("Settings", self.open_settings_dialog)
-        settings_button.pack(side="right", padx=(4, 0))
-        settings_button.config(state="disabled")
-        button_manager.register_button("settings_braindrive", settings_button)
-
         # Stop button (separate from start for clarity)
         stop_button = mkbtn("Stop", lambda: self.stop_server(status_updater))
-        stop_button.place(relx=1.0, rely=1.0, anchor="se", x=-80, y=-48)
+        stop_button.pack_forget()
         stop_button.place_forget()
         stop_button.config(state="disabled")
         button_manager.register_button("stop_braindrive", stop_button)
@@ -672,7 +811,6 @@ class BrainDrive(BaseCard):
             if disk_checker.has_enough_space(self.size):
                 button_manager.enable_buttons("install_braindrive")
                 # Allow configuring settings prior to installation
-                button_manager.enable_buttons("settings_braindrive")
                 status_updater.update_status(
                     "Installation Required",
                     "BrainDrive is not installed. Click Install to begin setup.",
