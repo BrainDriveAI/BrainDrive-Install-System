@@ -670,7 +670,7 @@ class BrainDrive(BaseCard):
         ).pack(anchor="w")
         tk.Label(
             title_block,
-            text="Dual-server AI platform runner",
+            text="MIT Self-Hosted Local AI",
             font=("Arial", 11),
             bg=card_bg,
             fg=muted_color,
