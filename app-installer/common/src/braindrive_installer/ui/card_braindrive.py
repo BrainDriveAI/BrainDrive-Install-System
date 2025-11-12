@@ -36,7 +36,7 @@ class BrainDrive(BaseCard):
         super().__init__(
             name="BrainDrive",
             description="BrainDrive is the MIT Licensed open source AI System you own, control, and build on.",
-            size="8.5"
+            size="3.25"
         )
         self.backend_running = False
         self.frontend_running = False
@@ -151,6 +151,8 @@ class BrainDrive(BaseCard):
                     if success:
                         self.logger.info("BrainDrive installation completed successfully")
                         _set_step_state("installing", "complete")
+                        if status_display:
+                            status_display.set_installed_status(True)
                         if status_updater:
                             status_updater.update_status(
                                 "Installation complete",
@@ -365,6 +367,17 @@ class BrainDrive(BaseCard):
                 # Update button states after a delay
                 self.logger.info("Updating button states after stop")
                 self._update_button_states()
+                if status_updater and success:
+                    status_updater.update_status(
+                        "Services Stopped",
+                        "BrainDrive services have been stopped successfully.",
+                        0,
+                    )
+                    if hasattr(self.config, "status_display"):
+                        try:
+                            self.config.status_display.set_primary_state("idle")
+                        except Exception:
+                            pass
 
         # Run in background thread
         threading.Thread(target=stop_servers_task, daemon=True).start()
@@ -810,12 +823,6 @@ class BrainDrive(BaseCard):
             disk_checker = DiskSpaceChecker()
             if disk_checker.has_enough_space(self.size):
                 button_manager.enable_buttons("install_braindrive")
-                # Allow configuring settings prior to installation
-                status_updater.update_status(
-                    "Installation Required",
-                    "BrainDrive is not installed. Click Install to begin setup.",
-                    0
-                )
             else:
                 button_manager.disable_buttons("install_braindrive")
                 status_updater.update_status(

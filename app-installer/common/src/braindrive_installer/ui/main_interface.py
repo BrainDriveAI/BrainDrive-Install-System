@@ -11,7 +11,6 @@ from braindrive_installer.ui.card_ollama import Ollama
 from braindrive_installer.ui.card_braindrive import BrainDrive
 
 from braindrive_installer.ui.status_display import StatusDisplay
-from braindrive_installer.ui.status_updater import StatusUpdater
 from braindrive_installer.ui.theme import Theme
 from braindrive_installer.config.AppConfig import AppConfig
 from braindrive_installer.utils.helper_image import HelperImage
@@ -84,7 +83,7 @@ def main():
         print(f"Failed to set application icon: {e}")
 
  
-    root.geometry("980x640")
+    root.geometry("1220x720")
     root.resizable(False, False)
 
     # Detect the OS and set the label text accordingly
@@ -207,12 +206,13 @@ def main():
     body.pack(fill=tk.BOTH, expand=True)
 
     content = tk.Frame(body, bg=base_bg)
-    content.pack(fill=tk.BOTH, expand=True, padx=24, pady=12)
+    content.pack(fill=tk.BOTH, expand=True, padx=24, pady=(12, 20))
 
     cards_wrapper = tk.Frame(content, bg=base_bg)
     cards_wrapper.pack(fill=tk.BOTH, expand=True)
     cards_wrapper.grid_columnconfigure(0, weight=1, uniform="card")
     cards_wrapper.grid_columnconfigure(1, weight=1, uniform="card")
+    cards_wrapper.grid_rowconfigure(0, weight=1)
 
     card_kwargs = {
         "bg": Theme.panel_bg_alt if Theme.active else "white",
@@ -227,35 +227,26 @@ def main():
     right_group.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
     right_group.pack_propagate(False)
 
-    # Bottom status section
-    status_display = StatusDisplay(content, inset=0)
-    step_label, details_label, progress_bar = status_display.get_components()
-    status_updater = StatusUpdater(step_label, details_label, progress_bar)
+    metadata_values = {
+        "os": os_text,
+        "disk": disk_text.replace("Disk space:", "").strip(),
+        "installPath": _format_install_path(config.base_path),
+        "version": version_text.replace("Version:", "").strip(),
+    }
+    status_section = tk.Frame(content, bg=base_bg)
+    status_section.pack(fill=tk.X, expand=False, pady=(20, 0))
+    status_display = StatusDisplay(status_section, inset=0, metadata=metadata_values, lock_width=False)
+    status_display.frame.pack(fill=tk.BOTH, expand=True)
     config.status_display = status_display
-    # Display cards with status_updater
+    status_updater = config.status_updater
+
+    status_display.register_action("install", lambda: braindrive_instance.install(status_updater))
+    status_display.register_action("resume", lambda: braindrive_instance.install(status_updater))
+    status_display.register_action("retry", lambda: braindrive_instance.install(status_updater))
+
     braindrive_instance.display(left_group, status_updater)
     ollama_instance.display(right_group, status_updater)
-
-    footer_bg = Theme.panel_bg if Theme.active else base_bg
-    footer = tk.Frame(shell, bg=footer_bg, height=56)
-    footer.pack(fill=tk.X, side=tk.BOTTOM, padx=24, pady=(0, 12))
-    footer.pack_propagate(False)
-    footer_inner = tk.Frame(footer, bg=footer_bg)
-    footer_inner.pack(fill=tk.X, padx=24, pady=10)
-    footer_items = [
-        f"OS: {os_text}",
-        disk_text,
-        f"Install path: {_format_install_path(config.base_path)}",
-        version_text,
-    ]
-    for text in footer_items:
-        tk.Label(
-            footer_inner,
-            text=text,
-            font=("Arial", 10),
-            bg=footer_bg,
-            fg=Theme.muted if Theme.active else "black",
-        ).pack(side=tk.LEFT, padx=(0, 24))
+    status_display.set_installed_status(braindrive_installed)
 
     # Setup cleanup handler for proper shutdown
     _cleanup_state = {"ran": False}
@@ -301,6 +292,7 @@ def main():
     # Add log file info to status display
     log_file_path = get_log_file_path()
     logger.info(f"Log file location: {log_file_path}")
+    status_display.set_log_file(log_file_path)
     
     # Background: check for updates and toggle button visibility
     def _toggle_update_if_available():

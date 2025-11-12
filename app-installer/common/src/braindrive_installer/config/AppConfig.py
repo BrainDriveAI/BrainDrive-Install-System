@@ -185,7 +185,7 @@ class AppConfig:
         """Set the StatusDisplay and initialize StatusUpdater."""
         self._status_display = display
         components = display.get_components()
-        self._status_updater = StatusUpdater(*components)
+        self._status_updater = StatusUpdater(*components, status_display=display)
 
     @property
     def status_updater(self):
