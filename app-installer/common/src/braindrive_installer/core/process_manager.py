@@ -11,6 +11,10 @@ import logging
 import signal
 from typing import Optional, Tuple, Dict, Any, List
 from braindrive_installer.core.platform_utils import PlatformUtils
+from braindrive_installer.core.port_selector import DEFAULT_PORT_PAIRS
+
+MANAGED_BACKEND_PORTS = tuple(pair[0] for pair in DEFAULT_PORT_PAIRS)
+MANAGED_FRONTEND_PORTS = tuple(pair[1] for pair in DEFAULT_PORT_PAIRS)
 
 
 class ProcessManager:
@@ -598,13 +602,23 @@ class ProcessManager:
                     
                     cmdline_str = ' '.join(cmdline)
                     
+                    backend_port_match = next(
+                        (
+                            port for port in MANAGED_BACKEND_PORTS
+                            if f"--port {port}" in cmdline_str or f"--port={port}" in cmdline_str
+                        ),
+                        None
+                    )
+                    
                     # Check for BrainDrive backend (uvicorn main:app)
                     if ('uvicorn' in cmdline_str and
                         'main:app' in cmdline_str and
-                        '--port 8005' in cmdline_str and
+                        backend_port_match is not None and
                         'braindrive_backend' not in self.processes):
                         
-                        self._update_status(f"Found orphaned backend process (PID: {proc.info['pid']})")
+                        self._update_status(
+                            f"Found orphaned backend process (PID: {proc.info['pid']}, port {backend_port_match})"
+                        )
                         
                         # Create a mock process object to track it
                         mock_process = type('MockProcess', (), {
@@ -633,38 +647,39 @@ class ProcessManager:
                           'dev' in cmdline_str and
                           'braindrive_frontend' not in self.processes):
                         
-                        # Additional check to see if it's running on port 5173
-                        try:
-                            import socket
-                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            result = sock.connect_ex(('localhost', 5173))
-                            sock.close()
+                        frontend_port_match = next(
+                            (
+                                port for port in MANAGED_FRONTEND_PORTS
+                                if f"--port {port}" in cmdline_str or f"--port={port}" in cmdline_str
+                            ),
+                            None
+                        )
+                        
+                        if frontend_port_match is not None:
+                            self._update_status(
+                                f"Found orphaned frontend process (PID: {proc.info['pid']}, port {frontend_port_match})"
+                            )
                             
-                            if result == 0:  # Port is open
-                                self._update_status(f"Found orphaned frontend process (PID: {proc.info['pid']})")
-                                
-                                # Create a mock process object to track it
-                                mock_process = type('MockProcess', (), {
-                                    'pid': proc.info['pid'],
-                                    'poll': lambda: None if psutil.pid_exists(proc.info['pid']) else 0,
-                                    'terminate': lambda: psutil.Process(proc.info['pid']).terminate(),
-                                    'kill': lambda: psutil.Process(proc.info['pid']).kill(),
-                                    'wait': lambda timeout=None: psutil.Process(proc.info['pid']).wait(timeout)
-                                })()
-                                
-                                # Adopt the process
-                                self.processes['braindrive_frontend'] = {
-                                    "process": mock_process,
-                                    "command": cmdline,
-                                    "cwd": "unknown",
-                                    "env": {},
-                                    "start_time": proc.info['create_time'],
-                                    "pid": proc.info['pid'],
-                                    "adopted": True
-                                }
-                                adopted_count += 1
-                        except:
-                            pass  # Skip if we can't check the port
+                            # Create a mock process object to track it
+                            mock_process = type('MockProcess', (), {
+                                'pid': proc.info['pid'],
+                                'poll': lambda: None if psutil.pid_exists(proc.info['pid']) else 0,
+                                'terminate': lambda: psutil.Process(proc.info['pid']).terminate(),
+                                'kill': lambda: psutil.Process(proc.info['pid']).kill(),
+                                'wait': lambda timeout=None: psutil.Process(proc.info['pid']).wait(timeout)
+                            })()
+                            
+                            # Adopt the process
+                            self.processes['braindrive_frontend'] = {
+                                "process": mock_process,
+                                "command": cmdline,
+                                "cwd": "unknown",
+                                "env": {},
+                                "start_time": proc.info['create_time'],
+                                "pid": proc.info['pid'],
+                                "adopted": True
+                            }
+                            adopted_count += 1
                             
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue

@@ -3,11 +3,15 @@ import os
 import secrets
 import tempfile
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from braindrive_installer.core.installer_state import InstallerState
 from braindrive_installer.core.platform_utils import PlatformUtils
 from braindrive_installer.core.installer_logger import get_installer_logger
+from braindrive_installer.core.port_selector import (
+    DEFAULT_PORT_PAIRS,
+    select_available_port_pair,
+)
 
 class BrainDriveSettingsManager:
     """Manages BrainDrive configuration settings with JSON persistence and template generation."""
@@ -50,16 +54,28 @@ class BrainDriveSettingsManager:
             return executable_dir
         return PlatformUtils.get_braindrive_base_path()
     
+    def _choose_default_ports(self) -> Tuple[int, int]:
+        """
+        Detect the best default port pair using the preferred list.
+        """
+        try:
+            backend_port, frontend_port = select_available_port_pair()
+            return backend_port, frontend_port
+        except Exception:
+            # Fall back to the first configured pair if probing fails.
+            return DEFAULT_PORT_PAIRS[0]
+
     def _get_default_settings(self) -> Dict[str, Any]:
         """Get default settings configuration"""
+        backend_port, frontend_port = self._choose_default_ports()
         return {
             "version": "1.0.2",
             "last_modified": datetime.utcnow().isoformat() + "Z",
             "network": {
                 "backend_host": "localhost",
-                "backend_port": 8005,
+                "backend_port": backend_port,
                 "frontend_host": "localhost",
-                "frontend_port": 5173
+                "frontend_port": frontend_port
             },
             "security": {
                 "enable_registration": True,
