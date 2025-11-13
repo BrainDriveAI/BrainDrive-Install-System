@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 
 from braindrive_installer.ui.status_spinner import StatusSpinner
 from braindrive_installer.ui.theme import Theme
@@ -54,6 +54,9 @@ class StatusDisplay:
     STEP_KEYS = [step["key"] for step in STEP_ORDER]
 
     EXEC_EXTENSIONS = (".exe", ".bat", ".cmd", ".ps1", ".sh", ".py")
+    FRIENDLY_COMMAND_PATTERNS = [
+        (re.compile(r"miniconda", re.IGNORECASE), "Installing MiniConda"),
+    ]
 
     STATE_STYLES = {
         "pending": {"icon": "\u25cb", "fg": Theme.muted},
@@ -112,7 +115,7 @@ class StatusDisplay:
         "complete": {
             "headline": "Install complete. BrainDrive is ready.",
             "card_primary": "Launch BrainDrive from your desktop icon.",
-            "card_secondary": "Auto-closing in 5 seconds.",
+            "card_secondary": "Your local AI is now ready to use.",
             "cta": None,
             "secondary_link": {"label": "View detailed log", "action": "viewLog"},
             "open_logs": False,
@@ -137,7 +140,15 @@ class StatusDisplay:
         "error": "Below: Error log, retry controls, and system metadata.",
     }
 
+    STEP_PREFIX_PATTERN = re.compile(
+        r"^\s*step\s*(?:\[\s*\d+\s*/\s*\d+\s*\]|\d+\s*/\s*\d+|\d+\s+of\s+\d+|\d+)\s*[:\-]?\s*",
+        re.IGNORECASE,
+    )
+
     LOG_ENTRY_LIMIT = 400
+    PROGRESS_META_MIN_WIDTH = 200
+    OPERATION_LABEL_FALLBACK_WIDTH = 360
+    OPERATION_DETAILS_FALLBACK_WIDTH = 520
     SUPPORT_URL = "https://github.com/BrainDriveAI/BrainDrive-Install-System/issues/new/choose"
 
     def __init__(self, parent, inset=0, metadata=None, log_file_path=None, min_width=340, lock_width=True):
@@ -155,6 +166,9 @@ class StatusDisplay:
         self._install_started_at = None
         self._installed_status = False
         self._stop_flow_active = False
+        self._operation_details_full_text = ""
+        self._operation_label_full_text = ""
+        self._operation_label_last_width = None
 
         self.colors = self._resolve_colors()
         frame_kwargs = {
@@ -264,15 +278,18 @@ class StatusDisplay:
         self.guidance_card = card
 
         self.card_primary_var = tk.StringVar()
-        tk.Label(
+        self.card_primary_label = tk.Label(
             card,
             textvariable=self.card_primary_var,
             font=("Segoe UI", 12, "bold"),
-            wraplength=520,
-            justify="left",
+            wraplength=760,
+            justify="center",
+            anchor="center",
             bg=self.colors["alt_bg"],
             fg=self.colors["text"],
-        ).pack(fill=tk.X, padx=16, pady=(16, 4))
+        )
+        self.card_primary_label.pack(fill=tk.X, padx=16, pady=(16, 4))
+        card.bind("<Configure>", self._handle_guidance_resize)
 
         self.card_secondary_var = tk.StringVar()
         tk.Label(
@@ -330,6 +347,14 @@ class StatusDisplay:
         self._cta_action_key = None
         self._secondary_action_key = None
 
+    def _handle_guidance_resize(self, event):
+        """Keep the guidance text centered and on a single line when space allows."""
+        if not getattr(self, "card_primary_label", None):
+            return
+
+        available_width = max(event.width - 32, 200)
+        self.card_primary_label.configure(wraplength=available_width)
+
     def _build_progress_region(self, parent):
         region = tk.Frame(parent, bg=self.colors["alt_bg"])
         region.pack(fill=tk.X, padx=16, pady=(0, 12))
@@ -337,15 +362,22 @@ class StatusDisplay:
 
         self.progress_header = tk.Frame(region, bg=self.colors["alt_bg"])
         self.progress_header.pack(fill=tk.X)
+        self.progress_header.grid_columnconfigure(0, weight=1)
+        self.progress_header.grid_columnconfigure(1, weight=0, minsize=0)
+        self._progress_meta_column_reserved = False
 
+        self._operation_label_grid = {"row": 0, "column": 0, "sticky": "w", "padx": (0, 12)}
         self.operation_label = tk.Label(
             self.progress_header,
             text="",
             font=("Segoe UI", 11, "bold"),
             bg=self.colors["alt_bg"],
             fg=self.colors["text"],
+            anchor="w",
+            justify="left",
+            wraplength=0,
         )
-        self.operation_label.pack(side=tk.LEFT, anchor="w")
+        self.operation_label.grid(**self._operation_label_grid)
 
         self.progress_meta_var = tk.StringVar(value="")
         self.progress_meta_label_inline = tk.Label(
@@ -354,22 +386,29 @@ class StatusDisplay:
             font=("Segoe UI", 9),
             bg=self.colors["alt_bg"],
             fg=self.colors["muted"],
-            width=26,
+            width=24,
             anchor="e",
+            justify="right",
         )
-        self._progress_meta_pack = {"side": tk.RIGHT, "anchor": "e"}
-        self.progress_meta_label_inline.pack_forget()
+        self._progress_meta_grid = {"row": 0, "column": 1, "sticky": "e"}
+        self.progress_meta_label_inline.grid_remove()
+        self.progress_header.bind("<Configure>", self._handle_progress_header_resize)
+        self._set_progress_meta_column_enabled(False)
+        self.progress_header.after(0, self._handle_progress_header_resize)
 
         self.operation_details_label = tk.Label(
             region,
             text="",
             font=("Segoe UI", 10, "italic"),
-            wraplength=520,
             justify="left",
+            anchor="w",
             bg=self.colors["alt_bg"],
             fg=self.colors["muted"],
+            wraplength=0,
+            height=1,
         )
-        self.operation_details_label.pack(anchor="w", pady=(2, 8))
+        self.operation_details_label.pack(anchor="w", fill=tk.X, pady=(2, 8))
+        self.operation_details_label.bind("<Configure>", self._handle_operation_details_resize)
 
         self.activity_bar = ttk.Progressbar(
             region,
@@ -649,7 +688,8 @@ class StatusDisplay:
         """Mirror StatusUpdater events inside the redesigned view."""
         raw_step = (step_text or "").strip()
         raw_details = (details_text or "").strip()
-        display_step = self._summarize_text(raw_step)
+        clean_step = self._strip_step_prefix(raw_step)
+        display_step = self._summarize_text(clean_step)
         display_details = self._summarize_text(raw_details, width=110)
         match = re.search(r"Step\s+(\d+)\s*/\s*(\d+)", raw_step, re.IGNORECASE)
 
@@ -678,16 +718,16 @@ class StatusDisplay:
 
         if inferred_state == "idle":
             self._set_operation_label(self._idle_status_message())
-            self.operation_details_label.config(text=self._idle_card_message())
+            self._set_operation_details_text(self._idle_card_message())
         elif inferred_state == "starting":
             self._set_operation_label("Starting BrainDrive")
-            self.operation_details_label.config(text=display_details or "Launching backend and frontend services.")
+            self._set_operation_details_text(display_details or "Launching backend and frontend services.")
         elif inferred_state == "stopping":
             self._set_operation_label("Stopping BrainDrive")
-            self.operation_details_label.config(text=display_details or "Stopping backend and frontend services.")
+            self._set_operation_details_text(display_details or "Stopping backend and frontend services.")
         else:
             self._set_operation_label(display_step or self.headline_var.get())
-            self.operation_details_label.config(text=display_details or self.card_primary_var.get())
+            self._set_operation_details_text(display_details or self.card_primary_var.get())
         self._set_progress_visibility(show_bar)
         self._update_progress_meta_text(numeric_progress, eta_seconds)
         self._append_log_entry(raw_step, raw_details)
@@ -706,7 +746,7 @@ class StatusDisplay:
         self._cancel_success_auto_dismiss()
         self.progress_bar.config(value=0)
         self._set_progress_visibility(False)
-        self.operation_details_label.config(text=self._idle_card_message())
+        self._set_operation_details_text(self._idle_card_message())
         self._set_operation_label(self._idle_status_message())
         if hasattr(self, "spinner"):
             self.spinner.stop()
@@ -777,7 +817,8 @@ class StatusDisplay:
             if not self.progress_bar.winfo_ismapped():
                 self.progress_bar.pack(fill=tk.X, pady=(0, 4))
             if not self.progress_meta_label_inline.winfo_ismapped():
-                self.progress_meta_label_inline.pack(**self._progress_meta_pack)
+                self.progress_meta_label_inline.grid(**self._progress_meta_grid)
+            self._set_progress_meta_column_enabled(True)
         else:
             if self._activity_running:
                 try:
@@ -790,8 +831,118 @@ class StatusDisplay:
             if self.progress_bar.winfo_ismapped():
                 self.progress_bar.pack_forget()
             if self.progress_meta_label_inline.winfo_ismapped():
-                self.progress_meta_label_inline.pack_forget()
+                self.progress_meta_label_inline.grid_remove()
+            self._set_progress_meta_column_enabled(False)
         self._progress_visible = show_bar
+
+    def _handle_progress_header_resize(self, _event=None):
+        if (
+            not hasattr(self, "progress_header")
+            or not hasattr(self, "operation_label")
+            or not hasattr(self, "progress_meta_label_inline")
+        ):
+            return
+        try:
+            header_width = self.progress_header.winfo_width()
+        except Exception:
+            return
+        if header_width <= 1:
+            return
+        reserved = 0
+        if getattr(self, "_progress_meta_column_reserved", False):
+            try:
+                reserved = max(
+                    self.PROGRESS_META_MIN_WIDTH,
+                    self.progress_meta_label_inline.winfo_width() or 0,
+                )
+            except Exception:
+                reserved = self.PROGRESS_META_MIN_WIDTH
+        padding = 16
+        available = max(140, header_width - reserved - padding)
+        self._apply_operation_label_truncation(available)
+
+    def _apply_operation_label_truncation(self, max_width=None):
+        if not hasattr(self, "operation_label"):
+            return
+        text = getattr(self, "_operation_label_full_text", "")
+        if not text:
+            self.operation_label.config(text="")
+            return
+        width = max_width or self._operation_label_last_width
+        if not width or width <= 0:
+            try:
+                width = self.operation_label.winfo_width()
+            except Exception:
+                width = None
+        if not width or width <= 0:
+            width = self.OPERATION_LABEL_FALLBACK_WIDTH
+        truncated = self._truncate_text_to_width(text, self.operation_label, width)
+        self.operation_label.config(text=truncated)
+        self._operation_label_last_width = width
+
+    def _set_progress_meta_column_enabled(self, enabled):
+        if not hasattr(self, "progress_header"):
+            return
+        if getattr(self, "_progress_meta_column_reserved", False) == enabled:
+            return
+        minsize = self.PROGRESS_META_MIN_WIDTH if enabled else 0
+        self.progress_header.grid_columnconfigure(1, minsize=minsize)
+        self._progress_meta_column_reserved = enabled
+        self._handle_progress_header_resize()
+
+    def _handle_operation_details_resize(self, event):
+        self._apply_operation_details_truncation(event.width if event else None)
+
+    def _set_operation_details_text(self, text):
+        sanitized = re.sub(r"\s+", " ", (text or ""))
+        self._operation_details_full_text = sanitized.strip()
+        self._apply_operation_details_truncation()
+
+    def _apply_operation_details_truncation(self, max_width=None):
+        if not hasattr(self, "operation_details_label"):
+            return
+        text = self._operation_details_full_text
+        if not text:
+            self.operation_details_label.config(text="")
+            return
+        width = max_width
+        if not width or width <= 0:
+            try:
+                width = self.operation_details_label.winfo_width()
+            except Exception:
+                width = None
+        if not width or width <= 0:
+            width = self.OPERATION_DETAILS_FALLBACK_WIDTH
+        truncated = self._truncate_text_to_width(text, self.operation_details_label, width)
+        self.operation_details_label.config(text=truncated)
+
+    @staticmethod
+    def _truncate_text_to_width(text, widget, max_width):
+        text = (text or "").strip()
+        if not text:
+            return ""
+        ellipsis = "..."
+        try:
+            font = tkfont.Font(font=widget.cget("font"))
+        except tk.TclError:
+            return textwrap.shorten(text, width=90, placeholder=ellipsis)
+        if font.measure(text) <= max_width:
+            return text
+        low, high = 0, len(text)
+        best = ellipsis
+        while low <= high:
+            mid = (low + high) // 2
+            candidate = text[:mid].rstrip()
+            if candidate:
+                candidate = f"{candidate}{ellipsis}"
+            else:
+                candidate = ellipsis
+            if font.measure(candidate) <= max_width:
+                best = candidate
+                low = mid + 1
+            else:
+                high = mid - 1
+        return best
 
     def _schedule_elapsed_update(self):
         if self._install_started_at is None:
@@ -839,29 +990,56 @@ class StatusDisplay:
         )
 
     def _set_operation_label(self, text):
-        if text:
+        sanitized = re.sub(r"\s+", " ", (text or "")).strip()
+        self._operation_label_full_text = sanitized
+        if sanitized:
             if not self.operation_label.winfo_ismapped():
-                self.operation_label.pack(side=tk.LEFT, anchor="w")
-            self.operation_label.config(text=text)
+                self.operation_label.grid(**self._operation_label_grid)
+            self._apply_operation_label_truncation()
         else:
             if self.operation_label.winfo_ismapped():
-                self.operation_label.pack_forget()
+                self.operation_label.grid_remove()
+            self.operation_label.config(text="")
+        self._handle_progress_header_resize()
+
+    def _strip_step_prefix(self, text):
+        sanitized = (text or "").strip()
+        if not sanitized:
+            return ""
+        stripped = self.STEP_PREFIX_PATTERN.sub("", sanitized, count=1).strip()
+        return stripped or sanitized
 
     def _summarize_text(self, text, width=96):
-        text = (text or "").strip()
+        text = re.sub(r"\s+", " ", (text or "")).strip()
         if not text:
             return ""
-        lower = text.lower()
-        tokens = text.split()
-        if tokens:
-            token = tokens[0].strip('"')
-            token_lower = token.lower()
-            if any(token_lower.endswith(ext) for ext in self.EXEC_EXTENSIONS):
-                base = Path(token).name or token
-                return f"Running {base}"
+        command_candidate = None
+        command_match = re.search(r"running\s+command:\s*\"?([^\s\"]+)", text, re.IGNORECASE)
+        if command_match:
+            command_candidate = command_match.group(1).strip().strip('"')
+        else:
+            tokens = text.split()
+            if tokens:
+                token = tokens[0].strip('"')
+                token_lower = token.lower()
+                if any(token_lower.endswith(ext) for ext in self.EXEC_EXTENSIONS):
+                    command_candidate = token
+        if command_candidate:
+            base = Path(command_candidate).name or command_candidate
+            friendly = self._friendly_command_title(command_candidate)
+            if friendly:
+                return friendly
+            return f"Running {base}"
         if len(text) <= width:
             return text
         return textwrap.shorten(text, width=width, placeholder="...")
+
+    @classmethod
+    def _friendly_command_title(cls, command_path):
+        for pattern, label in cls.FRIENDLY_COMMAND_PATTERNS:
+            if pattern.search(command_path):
+                return label
+        return None
 
     def _update_progress_meta_text(self, progress_value, eta_seconds=None):
         total = len(self.STEP_ORDER)
@@ -1088,7 +1266,7 @@ class StatusDisplay:
 
     def _on_success_dismiss(self):
         self.headline_var.set("BrainDrive installed successfully.")
-        self.card_primary_var.set("View details below or close this window.")
+        self.card_primary_var.set("Click start above to launch BrainDrive.")
         self._success_timer_id = None
         self._set_metadata_visibility(True)
 

@@ -3,12 +3,13 @@ Cross-platform compatibility utilities for BrainDrive Installer.
 Handles OS detection, path management, and platform-specific operations.
 """
 
-import hashlib
 import os
 import sys
 import platform
-import subprocess
+import shutil
 import stat
+import string
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -46,10 +47,55 @@ class PlatformUtils:
         return Path.home()
 
     @staticmethod
-    def _hash_for_path(path_value: str) -> str:
-        """Return a short, stable hash for a filesystem path."""
-        normalized = os.path.normcase(os.path.abspath(path_value or ""))
-        return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:12]
+    def _looks_like_hashed_state_dir(name: str) -> bool:
+        """Return True if the provided folder name matches the legacy hash scheme."""
+        return len(name) == 12 and all(char in string.hexdigits for char in name)
+
+    @staticmethod
+    def _prepare_state_dir(target: Path) -> bool:
+        """
+        Ensure the target directory exists and is writable.
+
+        Returns True when a write test succeeds.
+        """
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            test_file = target / ".write-test"
+            with test_file.open("w", encoding="utf-8") as handle:
+                handle.write("ok")
+            try:
+                test_file.unlink()
+            except FileNotFoundError:
+                pass
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _collapse_hashed_state_dirs(parent: Path) -> None:
+        """
+        Move files from legacy hashed subdirectories back into the parent directory.
+        """
+        if not parent.exists():
+            return
+
+        for child in list(parent.iterdir()):
+            if not child.is_dir() or not PlatformUtils._looks_like_hashed_state_dir(child.name):
+                continue
+            for payload in child.iterdir():
+                if not payload.is_file():
+                    continue
+                destination = parent / payload.name
+                if destination.exists():
+                    continue
+                try:
+                    shutil.move(str(payload), str(destination))
+                except Exception:
+                    continue
+            try:
+                child.rmdir()
+            except OSError:
+                pass
 
     @staticmethod
     def _get_appdata_base_dir() -> Path:
@@ -86,21 +132,16 @@ class PlatformUtils:
                 except IndexError:
                     base_dir = exe_path
 
-        digest = PlatformUtils._hash_for_path(str(exe_path))
-        local_dir = base_dir / "BrainDriveInstaller" / digest
+        local_dir = base_dir / "BrainDriveInstaller"
 
-        try:
-            local_dir.mkdir(parents=True, exist_ok=True)
-            test_file = local_dir / ".write-test"
-            with test_file.open("w", encoding="utf-8") as handle:
-                handle.write("ok")
-            test_file.unlink(missing_ok=True)
+        if PlatformUtils._prepare_state_dir(local_dir):
+            PlatformUtils._collapse_hashed_state_dirs(local_dir)
             return str(local_dir)
-        except Exception:
-            pass
 
-        fallback_dir = PlatformUtils._get_appdata_base_dir() / "BrainDriveInstaller" / digest
-        fallback_dir.mkdir(parents=True, exist_ok=True)
+        fallback_dir = PlatformUtils._get_appdata_base_dir() / "BrainDriveInstaller"
+        if not PlatformUtils._prepare_state_dir(fallback_dir):
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+        PlatformUtils._collapse_hashed_state_dirs(fallback_dir)
         return str(fallback_dir)
 
     @staticmethod
@@ -391,8 +432,6 @@ class PlatformUtils:
         Returns:
             int: Free disk space in bytes
         """
-        import shutil
-
         target = path or os.getcwd()
         target_path = Path(target)
 
