@@ -88,8 +88,8 @@ Settings are managed through:
 - **Environment Files**: Generated `.env` files for backend and frontend (auto-created from templates)
 
 Default configuration:
-- Backend: `localhost:8005`
-- Frontend: `localhost:5173`
+- Backend/Frontend ports: first free pair from `(8005/5173)`, `(8505/5573)`, `(8605/5673)`
+- Hosts: `localhost` for both services
 - Install path: `~/BrainDrive` (Linux/macOS) or `C:\Users\<Name>\BrainDrive` (Windows)
 
 ## Contributing

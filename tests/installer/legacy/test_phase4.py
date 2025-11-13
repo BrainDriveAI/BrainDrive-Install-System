@@ -8,6 +8,10 @@ import sys
 import os
 import unittest
 from unittest.mock import Mock, patch, MagicMock
+from braindrive_installer.core.port_selector import DEFAULT_PORT_PAIRS
+
+DEFAULT_BACKEND_PORT = DEFAULT_PORT_PAIRS[0][0]
+DEFAULT_FRONTEND_PORT = DEFAULT_PORT_PAIRS[0][1]
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -41,8 +45,8 @@ class TestPhase4Components(unittest.TestCase):
             self.assertEqual(braindrive.name, "BrainDrive")
             self.assertIn("Advanced AI platform", braindrive.description)
             self.assertEqual(braindrive.size, "8.5")
-            self.assertEqual(braindrive.backend_port, 8005)
-            self.assertEqual(braindrive.frontend_port, 5173)
+            self.assertEqual(braindrive.backend_port, DEFAULT_BACKEND_PORT)
+            self.assertEqual(braindrive.frontend_port, DEFAULT_FRONTEND_PORT)
             
             self.test_passed += 1
             print("[PASS] BrainDrive card instantiation successful")

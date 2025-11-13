@@ -67,17 +67,23 @@ class AppConfig:
             if normalized and (os.path.isdir(normalized) or not under_temp):
                 return normalized
 
-        executable_dir = PlatformUtils.get_executable_directory()
+        preferred_base = PlatformUtils.get_braindrive_base_path()
+        preferred_normalized = os.path.abspath(preferred_base) if preferred_base else None
+
         # On macOS when running from an .app bundle, avoid using the bundle directory
         # as an install destination; prefer the user's home-based path instead.
         if sys.platform == "darwin" and executable_dir:
             normalized_exec = os.path.abspath(executable_dir)
             if "/Contents/MacOS" in normalized_exec or normalized_exec.endswith("/MacOS"):
-                return PlatformUtils.get_braindrive_base_path()
+                if preferred_normalized:
+                    return preferred_normalized
+
+        if preferred_normalized:
+            return preferred_normalized
 
         if executable_dir and os.path.isdir(executable_dir):
             return executable_dir
-        return PlatformUtils.get_braindrive_base_path()
+        return preferred_normalized or PlatformUtils.get_braindrive_base_path()
 
     def set_base_path(self, base_path):
         """
@@ -177,7 +183,7 @@ class AppConfig:
         """Set the StatusDisplay and initialize StatusUpdater."""
         self._status_display = display
         components = display.get_components()
-        self._status_updater = StatusUpdater(*components)
+        self._status_updater = StatusUpdater(*components, status_display=display)
 
     @property
     def status_updater(self):

@@ -7,6 +7,10 @@ import os
 import tempfile
 import json
 from settings_manager import BrainDriveSettingsManager
+from braindrive_installer.core.port_selector import DEFAULT_PORT_PAIRS
+
+DEFAULT_BACKEND_PORT = DEFAULT_PORT_PAIRS[0][0]
+DEFAULT_FRONTEND_PORT = DEFAULT_PORT_PAIRS[0][1]
 
 def test_settings_manager():
     """Test the settings manager functionality"""
@@ -23,8 +27,8 @@ def test_settings_manager():
             
             # Test 1: Default settings
             print("\n1. Testing default settings...")
-            assert settings_manager.get_setting('network', 'backend_port') == 8005
-            assert settings_manager.get_setting('network', 'frontend_port') == 5173
+            assert settings_manager.get_setting('network', 'backend_port') == DEFAULT_BACKEND_PORT
+            assert settings_manager.get_setting('network', 'frontend_port') == DEFAULT_FRONTEND_PORT
             assert settings_manager.get_setting('security', 'enable_registration') == True
             assert settings_manager.get_setting('installation', 'path') == temp_dir
             print("✓ Default settings loaded correctly")

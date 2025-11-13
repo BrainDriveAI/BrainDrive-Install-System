@@ -20,6 +20,10 @@ from installer_braindrive import BrainDriveInstaller
 from card_braindrive import BrainDrive
 from AppConfig import AppConfig
 from platform_utils import PlatformUtils
+from braindrive_installer.core.port_selector import DEFAULT_PORT_PAIRS
+
+DEFAULT_BACKEND_PORT = DEFAULT_PORT_PAIRS[0][0]
+DEFAULT_FRONTEND_PORT = DEFAULT_PORT_PAIRS[0][1]
 
 class TestBrainDriveInstaller(unittest.TestCase):
     """Test suite for BrainDriveInstaller class."""
@@ -39,8 +43,8 @@ class TestBrainDriveInstaller(unittest.TestCase):
         """Test BrainDriveInstaller initialization."""
         self.assertEqual(self.installer.name, "BrainDrive")
         self.assertEqual(self.installer.repo_url, "https://github.com/BrainDriveAI/BrainDrive.git")
-        self.assertEqual(self.installer.backend_port, 8005)
-        self.assertEqual(self.installer.frontend_port, 5173)
+        self.assertEqual(self.installer.backend_port, DEFAULT_BACKEND_PORT)
+        self.assertEqual(self.installer.frontend_port, DEFAULT_FRONTEND_PORT)
         self.assertEqual(self.installer.env_name, "BrainDriveDev")
         
         # Check that managers are initialized
@@ -247,8 +251,8 @@ class TestBrainDriveCard(unittest.TestCase):
         self.assertEqual(self.card.name, "BrainDrive")
         self.assertIn("Advanced AI platform", self.card.description)
         self.assertEqual(self.card.size, "8.5")
-        self.assertEqual(self.card.backend_port, 8005)
-        self.assertEqual(self.card.frontend_port, 5173)
+        self.assertEqual(self.card.backend_port, DEFAULT_BACKEND_PORT)
+        self.assertEqual(self.card.frontend_port, DEFAULT_FRONTEND_PORT)
         self.assertFalse(self.card.backend_running)
         self.assertFalse(self.card.frontend_running)
     
@@ -261,8 +265,8 @@ class TestBrainDriveCard(unittest.TestCase):
                 'installed': True,
                 'backend_running': True,
                 'frontend_running': False,
-                'backend_url': 'http://localhost:8005',
-                'frontend_url': 'http://localhost:5173'
+                'backend_url': f'http://localhost:{DEFAULT_BACKEND_PORT}',
+                'frontend_url': f'http://localhost:{DEFAULT_FRONTEND_PORT}'
             }
             
             status = self.card.get_status()

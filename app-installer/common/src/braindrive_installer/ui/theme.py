@@ -1,27 +1,32 @@
 import sys
 
 class Theme:
-    """Simple dark theme helpers for Tk widgets and ttk styles."""
+    """Dark theme helpers tuned to the BrainDrive dark runner reference."""
 
-    # Core palette
-    bg = "#2b2b2b"
-    panel_bg = "#333333"
-    header_bg = "#3a3a3a"
-    border = "#555555"
-    text = "#e8e8e8"
-    muted = "#c8c8c8"
-    accent = "#4a90e2"
+    # Core palette pulled from dark UI reference
+    bg = "#050c18"
+    panel_bg = "#0e1522"
+    panel_bg_alt = "#111b2a"
+    header_bg = "#111b2a"
+    sidebar_bg = "#0a111c"
+    border = "#1e2a3f"
+    border_soft = "#162133"
+    text = "#f4f7fb"
+    muted = "#94a2c5"
+    accent = "#42a5ff"
+    accent_soft = "#2f7ad9"
 
-    button_bg = "#454545"
-    button_active = "#555555"
-    button_text = "#ffffff"
-    button_disabled_bg = "#4a4a4a"
-    button_disabled_text = "#9aa0a6"
-    success = "#34d058"
-    warning = "#f5a623"
+    button_bg = "#111c2c"
+    button_active = "#1b2940"
+    button_text = "#eff6ff"
+    button_disabled_bg = "#0b121f"
+    button_disabled_text = "#4b5a75"
+    success = "#43e6b2"
+    warning = "#ffc474"
+    danger = "#ff7b7b"
 
-    # Only turn theme on for macOS by default
-    active = sys.platform == "darwin"
+    # Always run with the custom theme
+    active = True
 
     @staticmethod
     def apply(root):
@@ -42,6 +47,12 @@ class Theme:
         style.configure(
             "Dark.TFrame",
             background=Theme.panel_bg,
+        )
+        style.configure(
+            "DarkRaised.TFrame",
+            background=Theme.panel_bg_alt,
+            bordercolor=Theme.border,
+            relief="flat",
         )
         style.configure(
             "Dark.TLabel",
@@ -84,7 +95,13 @@ class Theme:
             background=Theme.accent,
             bordercolor=Theme.border,
             lightcolor=Theme.accent,
-            darkcolor=Theme.accent,
+            darkcolor=Theme.accent_soft,
+            thickness=14,
+        )
+        style.configure(
+            "Indeterminate.Horizontal.TProgressbar",
+            troughcolor=Theme.panel_bg_alt,
+            background=Theme.accent,
         )
 
         # Buttons
@@ -93,9 +110,10 @@ class Theme:
             background=Theme.button_bg,
             foreground=Theme.button_text,
             bordercolor=Theme.border,
-            focusthickness=0,
-            focuscolor=Theme.button_bg,
-            padding=(6, 3),
+            focusthickness=2,
+            focuscolor=Theme.accent_soft,
+            padding=(16, 8),
+            relief="flat",
         )
         style.map(
             "Dark.TButton",
@@ -131,7 +149,7 @@ class Theme:
         # Entry / Combobox fields
         style.configure(
             "Dark.TEntry",
-            fieldbackground="#3b3b3b",
+            fieldbackground=Theme.panel_bg_alt,
             foreground=Theme.text,
             background=Theme.panel_bg,
             bordercolor=Theme.border,
@@ -140,14 +158,14 @@ class Theme:
         )
         style.configure(
             "Dark.TCombobox",
-            fieldbackground="#3b3b3b",
+            fieldbackground=Theme.panel_bg_alt,
             foreground=Theme.text,
             background=Theme.panel_bg,
             arrowcolor=Theme.text,
         )
         style.map(
             "Dark.TCombobox",
-            fieldbackground=[("readonly", "#3b3b3b")],
+            fieldbackground=[("readonly", Theme.panel_bg_alt)],
         )
 
         # Notebook (tabs)
@@ -170,5 +188,5 @@ class Theme:
 
         # Basic tk defaults for dark bg
         root.configure(bg=Theme.bg)
-        root.option_add("*TCombobox*Listbox*background", "#3b3b3b")
+        root.option_add("*TCombobox*Listbox*background", Theme.panel_bg_alt)
         root.option_add("*TCombobox*Listbox*foreground", Theme.text)

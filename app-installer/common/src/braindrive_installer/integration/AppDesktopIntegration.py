@@ -29,7 +29,7 @@ class AppDesktopIntegration:
             self.exe_name = "BrainDriveInstallerUpdater-win-x64.exe"
             self.icon_name = "braindriveai.ico"
             self.desktop_path = shell.SHGetFolderPath(0, shellcon.CSIDL_DESKTOP, None, 0)
-            self.shortcut_name = "Open WebUI Installer.lnk"
+            self.shortcut_name = "BrainDrive.lnk"
             self.repo_url = (
                 "https://github.com/BrainDriveAI/BrainDrive-Install-System/releases/latest/download/BrainDriveInstallerUpdater-win-x64.exe"
             )
@@ -39,7 +39,7 @@ class AppDesktopIntegration:
             # Prefer PNG at runtime (bundled via PyInstaller datas)
             self.icon_name = "braindrive.png"
             self.desktop_path = os.path.expanduser("~/Desktop")
-            self.shortcut_name = "Open WebUI Installer"
+            self.shortcut_name = "BrainDrive"
             self.repo_url = ""
 
         self.shortcut_path = os.path.join(self.desktop_path, self.shortcut_name)

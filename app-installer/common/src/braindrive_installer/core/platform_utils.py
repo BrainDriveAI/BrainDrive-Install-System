@@ -6,8 +6,10 @@ Handles OS detection, path management, and platform-specific operations.
 import os
 import sys
 import platform
-import subprocess
+import shutil
 import stat
+import string
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -43,7 +45,116 @@ class PlatformUtils:
             Path: User's home directory path
         """
         return Path.home()
-    
+
+    @staticmethod
+    def _looks_like_hashed_state_dir(name: str) -> bool:
+        """Return True if the provided folder name matches the legacy hash scheme."""
+        return len(name) == 12 and all(char in string.hexdigits for char in name)
+
+    @staticmethod
+    def _prepare_state_dir(target: Path) -> bool:
+        """
+        Ensure the target directory exists and is writable.
+
+        Returns True when a write test succeeds.
+        """
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            test_file = target / ".write-test"
+            with test_file.open("w", encoding="utf-8") as handle:
+                handle.write("ok")
+            try:
+                test_file.unlink()
+            except FileNotFoundError:
+                pass
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _collapse_hashed_state_dirs(parent: Path) -> None:
+        """
+        Move files from legacy hashed subdirectories back into the parent directory.
+        """
+        if not parent.exists():
+            return
+
+        for child in list(parent.iterdir()):
+            if not child.is_dir() or not PlatformUtils._looks_like_hashed_state_dir(child.name):
+                continue
+            for payload in child.iterdir():
+                if not payload.is_file():
+                    continue
+                destination = parent / payload.name
+                if destination.exists():
+                    continue
+                try:
+                    shutil.move(str(payload), str(destination))
+                except Exception:
+                    continue
+            try:
+                child.rmdir()
+            except OSError:
+                pass
+
+    @staticmethod
+    def _get_appdata_base_dir() -> Path:
+        """Return the per-user data directory used for fallbacks."""
+        os_type = PlatformUtils.get_os_type()
+        if os_type == "windows":
+            base = os.getenv("APPDATA")
+            if base:
+                return Path(base)
+            return PlatformUtils.get_home_directory() / "AppData" / "Roaming"
+        if os_type == "macos":
+            return PlatformUtils.get_home_directory() / "Library" / "Application Support"
+        return PlatformUtils.get_home_directory() / ".local" / "share"
+
+    @staticmethod
+    def get_installer_data_dir(executable_dir: Optional[str] = None) -> str:
+        """
+        Preferred directory for storing installer-specific state.
+        Tries to keep data beside the executable; falls back to AppData-style paths.
+        """
+        exe_dir = executable_dir or PlatformUtils.get_executable_directory() or os.getcwd()
+        exe_path = Path(exe_dir)
+        try:
+            exe_path = exe_path.resolve()
+        except Exception:
+            exe_path = exe_path.absolute()
+
+        base_dir = exe_path
+        if PlatformUtils.get_os_type() == "macos":
+            mac_str = str(exe_path)
+            if "Contents/MacOS" in mac_str:
+                try:
+                    base_dir = exe_path.parents[1] / "Resources"
+                except IndexError:
+                    base_dir = exe_path
+
+        local_dir = base_dir / "BrainDriveInstaller"
+
+        if PlatformUtils._prepare_state_dir(local_dir):
+            PlatformUtils._collapse_hashed_state_dirs(local_dir)
+            return str(local_dir)
+
+        fallback_dir = PlatformUtils._get_appdata_base_dir() / "BrainDriveInstaller"
+        if not PlatformUtils._prepare_state_dir(fallback_dir):
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+        PlatformUtils._collapse_hashed_state_dirs(fallback_dir)
+        return str(fallback_dir)
+
+    @staticmethod
+    def get_default_install_dir() -> str:
+        """
+        Return the preferred per-user install directory (~/BrainDrive or %USERPROFILE%\\BrainDrive).
+
+        Returns:
+            str: Absolute path under the user's home directory.
+        """
+        home_dir = PlatformUtils.get_home_directory()
+        return str(home_dir / "BrainDrive")
+
     @staticmethod
     def get_braindrive_base_path() -> str:
         """
@@ -52,8 +163,7 @@ class PlatformUtils:
         Returns:
             str: Platform-appropriate base path
         """
-        home = PlatformUtils.get_home_directory()
-        return str(home / "BrainDrive")
+        return PlatformUtils.get_default_install_dir()
     
     @staticmethod
     def get_executable_directory() -> str:
@@ -322,13 +432,22 @@ class PlatformUtils:
         Returns:
             int: Free disk space in bytes
         """
+        target = path or os.getcwd()
+        target_path = Path(target)
+
+        if not target_path.exists():
+            candidate = target_path.anchor or (target_path.drive if hasattr(target_path, "drive") else None)
+            if not candidate and target_path.parents:
+                for parent in target_path.parents:
+                    if parent.exists():
+                        candidate = str(parent)
+                        break
+            if not candidate:
+                candidate = os.getcwd()
+            target = candidate
+
         try:
-            if PlatformUtils.get_os_type() == 'windows':
-                import shutil
-                return shutil.disk_usage(path).free
-            else:
-                import shutil
-                return shutil.disk_usage(path).free
+            return shutil.disk_usage(target).free
         except Exception:
             return 0
     

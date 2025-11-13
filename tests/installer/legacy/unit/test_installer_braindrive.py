@@ -17,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from installer_braindrive import BrainDriveInstaller
 from AppConfig import AppConfig
+from braindrive_installer.core.port_selector import DEFAULT_PORT_PAIRS
+
+DEFAULT_BACKEND_PORT = DEFAULT_PORT_PAIRS[0][0]
+DEFAULT_FRONTEND_PORT = DEFAULT_PORT_PAIRS[0][1]
 
 
 class TestBrainDriveInstaller:
@@ -30,8 +34,8 @@ class TestBrainDriveInstaller:
         # Test basic properties
         assert installer.name == "BrainDrive"
         assert installer.repo_url == "https://github.com/BrainDriveAI/BrainDrive.git"
-        assert installer.backend_port == 8005
-        assert installer.frontend_port == 5173
+        assert installer.backend_port == DEFAULT_BACKEND_PORT
+        assert installer.frontend_port == DEFAULT_FRONTEND_PORT
         assert installer.env_name == "BrainDriveDev"
         assert installer.status_updater == status_updater
         
@@ -43,6 +47,36 @@ class TestBrainDriveInstaller:
         
         # Test config is set
         assert isinstance(installer.config, AppConfig)
+
+    def test_auto_select_ports_advances_pair(self):
+        """Default-managed ports should move to the next free pair."""
+        installer = BrainDriveInstaller()
+        installer.backend_port = DEFAULT_BACKEND_PORT
+        installer.frontend_port = DEFAULT_FRONTEND_PORT
+        installer.backend_host = "localhost"
+        installer.frontend_host = "localhost"
+
+        next_pair = (8505, 5573)
+        with patch('installer_braindrive.select_available_port_pair', return_value=next_pair):
+            changed = installer._auto_select_ports_if_default(None)
+
+        assert changed is True
+        assert installer.backend_port == next_pair[0]
+        assert installer.frontend_port == next_pair[1]
+
+    def test_auto_select_ports_ignores_custom_values(self):
+        """Ports outside the managed list should never be auto-updated."""
+        installer = BrainDriveInstaller()
+        installer.backend_port = 9100
+        installer.frontend_port = 9200
+        installer.backend_host = "localhost"
+        installer.frontend_host = "localhost"
+
+        with patch('installer_braindrive.select_available_port_pair') as mock_select:
+            changed = installer._auto_select_ports_if_default(None)
+
+        assert changed is False
+        mock_select.assert_not_called()
     
     def test_installer_initialization_no_updater(self):
         """Test BrainDriveInstaller initialization without status updater."""

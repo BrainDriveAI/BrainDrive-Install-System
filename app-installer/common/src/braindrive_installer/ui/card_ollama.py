@@ -13,15 +13,21 @@ from braindrive_installer.ui.theme import Theme
 import socket
 from braindrive_installer.ui.ButtonStateManager import ButtonStateManager
 from braindrive_installer.utils.DiskSpaceChecker import DiskSpaceChecker
+from braindrive_installer.utils.helper_image import HelperImage
+from pathlib import Path
+from importlib import resources
+from io import BytesIO
+from braindrive_installer.core.installer_logger import get_installer_logger
 
 class Ollama(BaseCard):
     def __init__(self):
         super().__init__(
             name="Ollama",
-            description="Ollama allows you to download and run AI models on your computer to use with your AI system privately and securely",
+            description="Ollama enables you to download and run open source AI models in your BrainDrive directly from your computer. Once you download a model, you don't even need an internet connection to run it. Ollama is free to use with your BrainDrive.",
             size="3.5"
         )
         self.installed = False
+        self.logger = get_installer_logger()
 
     def is_port_open(self, port=11434):
         """
@@ -39,7 +45,7 @@ class Ollama(BaseCard):
         def ollama_install_task():
             try:
                 self.config.status_updater.update_status(
-                    "Step: [1/3] Downloading Ollama...",
+                    "Downloading Ollama...",
                     "Downloading the Ollama installer. Please wait.",
                     0,
                 )
@@ -55,7 +61,7 @@ class Ollama(BaseCard):
                     out_file.write(data)
 
                 self.config.status_updater.update_status(
-                        "Step: [2/3] Running Installer...",
+                        "Running Installer...",
                         "Running the Ollama installer. Follow the on-screen instructions.",
                         50,
                     )
@@ -64,7 +70,7 @@ class Ollama(BaseCard):
                 subprocess.Popen(installer_path, shell=True)
 
                 self.config.status_updater.update_status(
-                        "Step: [3/3] Ollama Installation Started",
+                        "Ollama Installation Started",
                         "The Ollama install inferface should be visible soon.",
                         100,
                     )
@@ -130,76 +136,135 @@ class Ollama(BaseCard):
         button_manager = ButtonStateManager()
 
         self.set_parent_frame(parent_frame)
+        card_bg = Theme.panel_bg_alt if Theme.active else "white"
+        border_color = Theme.border if Theme.active else "#d9d9d9"
+        text_color = Theme.text if Theme.active else "black"
+        muted_color = Theme.muted if Theme.active else "#4a4a4a"
+
         card_frame = tk.Frame(
             parent_frame,
-            relief=tk.GROOVE,
-            bd=2,
-            **({"bg": Theme.panel_bg, "highlightbackground": Theme.border, "highlightthickness": 1} if Theme.active else {})
+            bg=card_bg,
+            highlightbackground=border_color,
+            highlightthickness=1,
+            bd=0,
+            relief=tk.FLAT,
         )
-        card_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        card_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        card_frame.pack_propagate(False)
 
+        header = tk.Frame(card_frame, bg=card_bg)
+        header.pack(fill=tk.X, padx=18, pady=(18, 8))
+
+        def _resolve_icon(name: str):
+            candidates = []
+            try:
+                helpers = HelperImage.get_image_path(name)
+                candidates.append(Path(helpers))
+            except Exception:
+                pass
+            base_path = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+            candidates.extend(
+                [
+                    base_path / name,
+                    base_path / "assets" / name,
+                    Path(__file__).resolve().parents[4] / "assets" / name,
+                ]
+            )
+            for candidate in candidates:
+                if candidate and candidate.exists():
+                    return candidate
+            return None
+
+        card_image = None
         try:
-            base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-            candidates = [
-                os.path.join(base_path, 'ollama.png'),
-                os.path.join(base_path, 'assets', 'ollama.png'),
-            ]
-            image_path = None
-            for c in candidates:
-                if os.path.isfile(c):
-                    image_path = c
-                    break
-            if image_path is None:
-                # Fallback to helper that searches assets and base path
-                from braindrive_installer.utils.helper_image import HelperImage
-                image_path = HelperImage.get_image_path('ollama.png')
-            card_image = Image.open(image_path)
-            card_image.thumbnail((50, 50))
-            card_photo = ImageTk.PhotoImage(card_image)
+            data = (resources.files("braindrive_installer") / "assets" / "ollama.png").read_bytes()
+            card_image = Image.open(BytesIO(data)).convert("RGBA")
+            self.logger.debug("Loaded Ollama icon from packaged assets.")
+        except Exception as exc:
+            self.logger.debug(f"Packaged Ollama icon load failed: {exc}")
 
-            ollama_icon = tk.Label(card_frame, image=card_photo, **({"bg": Theme.panel_bg} if Theme.active else {}))
-            ollama_icon.image = card_photo  # Keep a reference
-            ollama_icon.place(x=10, y=10)
-        except Exception as e:
-            print(f"Failed to load the image: {e}")
-            # Create a placeholder icon if image loading fails
-            ollama_icon = tk.Label(card_frame, text="🦙", font=("Arial", 20), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
-            ollama_icon.place(x=10, y=10)
+        if card_image is None:
+            icon_path = _resolve_icon("ollama.png")
+            if icon_path:
+                try:
+                    card_image = Image.open(icon_path).convert("RGBA")
+                    self.logger.debug(f"Loaded Ollama icon from {icon_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to load Ollama icon at {icon_path}: {e}")
 
+        if card_image is None:
+            self.logger.warning("Falling back to placeholder Ollama icon.")
+            card_image = Image.new("RGBA", (48, 48), color=Theme.accent if Theme.active else "#4a90e2")
+        card_image.thumbnail((48, 48))
+        card_photo = ImageTk.PhotoImage(card_image)
+        icon_label = tk.Label(header, image=card_photo, bg=card_bg)
+        icon_label.image = card_photo
+        icon_label.pack(side=tk.LEFT, padx=(0, 10))
 
-        card_label = tk.Label(card_frame, text=self.name, font=("Arial", 16, "bold"), **({"bg": Theme.panel_bg, "fg": Theme.text} if Theme.active else {}))
-        card_label.place(relx=0.5, y=20, anchor="center")
+        tk.Label(
+            header,
+            text=self.name,
+            font=("Arial", 18, "bold"),
+            bg=card_bg,
+            fg=text_color,
+        ).pack(side=tk.LEFT, anchor="w")
 
-        card_info = tk.Label(
-            card_frame,
+        copy_frame = tk.Frame(card_frame, bg=card_bg)
+        copy_frame.pack(fill=tk.X, padx=26, pady=(0, 8))
+        description_label = tk.Label(
+            copy_frame,
             text=self.description,
-            font=("Arial", 10),
-            wraplength=350,
+            font=("Arial", 11),
             justify="left",
-            **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}),
+            bg=card_bg,
+            fg=text_color,
+            anchor="w",
         )
-        card_info.place(x=10, y=70)
+        description_label.pack(fill=tk.X, anchor="w")
 
-        size_label = tk.Label(card_frame, text=f"Size: {self.size}GB", font=("Arial", 9), **({"bg": Theme.panel_bg, "fg": Theme.muted} if Theme.active else {}))
-        size_label.place(x=10, rely=1.0, anchor="sw", y=-10)
+        def _update_wrap(event=None):
+            inner_width = max(280, copy_frame.winfo_width() - 4)
+            try:
+                description_label.config(wraplength=inner_width)
+            except Exception:
+                pass
 
+        copy_frame.bind("<Configure>", _update_wrap)
+        _update_wrap()
+
+        spacer = tk.Frame(card_frame, bg=card_bg)
+        spacer.pack(fill=tk.BOTH, expand=True)
+
+        meta = tk.Frame(card_frame, bg=card_bg)
+        meta.pack(fill=tk.X, padx=26, pady=(4, 0))
+        tk.Label(
+            meta,
+            text=f"Size: {self.size} GB",
+            font=("Arial", 10, "bold"),
+            bg=card_bg,
+            fg=muted_color,
+        ).pack(side=tk.LEFT)
+
+        button_frame = tk.Frame(card_frame, bg=card_bg)
+        button_frame.pack(fill=tk.X, padx=26, pady=(10, 18))
         if Theme.active:
             install_button = ttk.Button(
-                card_frame,
-                text="Install",
+                button_frame,
+                text="Install Ollama",
                 command=lambda: self.install(status_updater),
                 style="Dark.TButton",
-                width=8,
+                width=14,
             )
         else:
             install_button = tk.Button(
-                card_frame,
-                text="Install",
+                button_frame,
+                text="Install Ollama",
                 command=lambda: self.install(status_updater),
+                width=14,
             )
-        install_button.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
-        button_manager.register_button("install_ollama", install_button)
+        install_button.pack(anchor="e")
 
+        button_manager.register_button("install_ollama", install_button)
         self.monitor_port_and_update_button("install_ollama")
 
         # uninstall_button = tk.Button(card_frame, text="Uninstall", command=self.uninstall)
@@ -211,3 +276,4 @@ class Ollama(BaseCard):
             command=lambda: print(self.get_status())
         )
         # status_button.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)    
+

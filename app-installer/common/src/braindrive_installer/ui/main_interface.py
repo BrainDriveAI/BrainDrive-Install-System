@@ -6,16 +6,16 @@ import platform
 import threading
 import tkinter as tk
 from tkinter import ttk
+from PIL import Image, ImageTk
 from braindrive_installer.ui.card_ollama import Ollama
 from braindrive_installer.ui.card_braindrive import BrainDrive
 
 from braindrive_installer.ui.status_display import StatusDisplay
-from braindrive_installer.ui.status_updater import StatusUpdater
 from braindrive_installer.ui.theme import Theme
 from braindrive_installer.config.AppConfig import AppConfig
-from braindrive_installer.utils.helper_image import HelperImage
 from braindrive_installer.integration.AppDesktopIntegration import AppDesktopIntegration
 from braindrive_installer.core.installer_logger import get_installer_logger, get_log_file_path
+from braindrive_installer.core.platform_utils import PlatformUtils
 from pathlib import Path
 
 # Update check deps
@@ -29,6 +29,60 @@ try:
 except Exception:  # pragma: no cover - fallback for older
     pkg_resources = None
 
+
+def _resolve_asset_path(filename: str):
+    """Return a path to the requested asset without writing into the install directory."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        meipass_path = Path(meipass)
+        candidates.append(meipass_path / filename)
+        candidates.append(meipass_path / "assets" / filename)
+
+    if pkg_resources is not None:
+        try:
+            asset = pkg_resources.files("braindrive_installer") / filename
+            candidates.append(asset)
+            candidates.append(pkg_resources.files("braindrive_installer") / "assets" / filename)
+        except Exception:
+            pass
+
+    resolved_file = Path(__file__).resolve()
+    base_common = resolved_file.parents[3]
+    project_root = resolved_file.parents[4]
+    candidates.append(base_common / "assets" / filename)
+    candidates.append(project_root / "windows" / filename)
+    candidates.append(project_root / "common" / "assets" / filename)
+
+    for candidate in candidates:
+        try:
+            if candidate and Path(candidate).is_file():
+                return str(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def _ensure_executable_asset(filename: str):
+    """Copy the given asset next to the running executable if it is not already present."""
+    exe_dir = Path(PlatformUtils.get_executable_directory())
+    dest = exe_dir / filename
+    if dest.exists():
+        return str(dest)
+
+    source = _resolve_asset_path(filename)
+    if not source:
+        return None
+
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, dest)
+        return str(dest)
+    except Exception:
+        logger = get_installer_logger()
+        logger.warning(f"Failed to copy {filename} to executable directory: {source}")
+        return source
+
 def main():
     # Initialize logging first
     logger = get_installer_logger()
@@ -36,45 +90,76 @@ def main():
     
     # Create the main window
     root = tk.Tk()
-    root.title("BrainDrive Installer [v1.0.2]")
+    braindrive_instance = BrainDrive()
+    braindrive_installed = False
+    try:
+        braindrive_installed = braindrive_instance.braindrive_installer.check_installed()
+    except Exception:
+        braindrive_installed = False
+    runner_name = "BrainDrive Manager" if braindrive_installed else "BrainDrive Installer"
+    root.title(f"{runner_name} [v1.0.3]")
     Theme.apply(root)
     config = AppConfig()
+    base_bg = Theme.bg if Theme.active else "lightgrey"
+    root.configure(bg=base_bg)
 
-    try:
-        desktop_integration = AppDesktopIntegration()
-        icon_path = desktop_integration.setup_application_icon()
+    if braindrive_installed:
+        try:
+            desktop_integration = AppDesktopIntegration()
+            icon_path = desktop_integration.setup_application_icon()
 
-        # On Windows, Tk expects .ico; on macOS use iconphoto with PNG
+            if platform.system() == "Windows":
+                local_icon = _ensure_executable_asset("braindriveai.ico") or icon_path
+                if local_icon:
+                    try:
+                        root.iconbitmap(local_icon)
+                    except Exception:
+                        pass
+            else:
+                png_path = _ensure_executable_asset("braindrive.png") or _resolve_asset_path("braindrive.png")
+                if png_path:
+                    try:
+                        photo = tk.PhotoImage(file=png_path)
+                        root.iconphoto(True, photo)
+                    except Exception:
+                        pass
+
+            def background_task():
+                try:
+                    desktop_integration.verify_exe_exists()
+                    desktop_integration.verify_and_update_icon()
+                except Exception:
+                    pass
+
+            threading.Thread(target=background_task, daemon=True).start()
+
+        except Exception as e:
+            logger.error(f"Failed to set application icon: {e}")
+            print(f"Failed to set application icon: {e}")
+    else:
         if platform.system() == "Windows":
-            try:
-                root.iconbitmap(icon_path)
-            except Exception:
-                pass
+            ico_path = (
+                _ensure_executable_asset("braindriveai.ico")
+                or _ensure_executable_asset("braindrive.ico")
+                or _resolve_asset_path("braindriveai.ico")
+                or _resolve_asset_path("braindrive.ico")
+            )
+            if ico_path:
+                try:
+                    root.iconbitmap(ico_path)
+                except Exception:
+                    pass
         else:
-            try:
-                # Prefer PNG from assets for mac/Linux
-                from braindrive_installer.utils.helper_image import HelperImage
-                png_path = HelperImage.get_image_path("braindrive.png")
-                photo = tk.PhotoImage(file=png_path)
-                root.iconphoto(True, photo)
-            except Exception:
-                pass
-
-        def background_task():
-            try:
-                desktop_integration.verify_exe_exists()
-                desktop_integration.verify_and_update_icon()
-            except Exception:
-                pass
-
-        threading.Thread(target=background_task, daemon=True).start()
-
-    except Exception as e:
-        logger.error(f"Failed to set application icon: {e}")
-        print(f"Failed to set application icon: {e}")
+            png_path = _ensure_executable_asset("braindrive.png") or _resolve_asset_path("braindrive.png")
+            if png_path:
+                try:
+                    photo = tk.PhotoImage(file=png_path)
+                    root.iconphoto(True, photo)
+                except Exception:
+                    pass
 
  
-    root.geometry("800x600")
+    root.geometry("1220x720")
     root.resizable(False, False)
 
     # Detect the OS and set the label text accordingly
@@ -91,74 +176,164 @@ def main():
     else:
         os_text = f"Using {os_name}"
 
-    # Top section
-    if Theme.active:
-        top_frame = tk.Frame(root, height=90, bg=Theme.header_bg)
-    else:
-        top_frame = tk.Frame(root, height=80, bg="lightgrey")
-    top_frame.pack(fill=tk.X)
+    disk_text = _format_disk_summary(config.base_path)
+    version_text = f"Version: {_get_current_installer_version()}"
 
-    title_kwargs = {"text": "AI System Installer by BrainDrive.ai", "font": ("Arial", 24)}
-    if Theme.active:
-        title_kwargs.update(bg=Theme.header_bg, fg=Theme.text)
-    else:
-        title_kwargs.update(bg="lightgrey")
-    title_label = tk.Label(top_frame, **title_kwargs)
-    title_label.place(relx=0.5, rely=0.45, anchor="center")
+    ui_images = []
 
-    # New label for "Using Windows 10"
-    os_label_kwargs = {"text": os_text, "font": ("Arial", 10)}
-    if Theme.active:
-        os_label_kwargs.update(bg=Theme.header_bg, fg=Theme.muted)
-    else:
-        os_label_kwargs.update(bg="lightgrey")
-    os_label = tk.Label(top_frame, **os_label_kwargs)
-    os_label.place(relx=0.5, rely=0.8, anchor="center")
+    def _load_image(filename: str, size=(48, 48)):
+        path = _resolve_asset_path(filename)
+        if not path:
+            return None
+        try:
+            image = Image.open(path).convert("RGBA")
+            image.thumbnail(size, Image.LANCZOS)
+            photo = ImageTk.PhotoImage(image)
+            ui_images.append(photo)
+            return photo
+        except Exception:
+            return None
 
-    # Prepare an Update button (initially hidden); shown only if newer installer exists
-    update_button = ttk.Button(top_frame, text="Update Available", command=lambda: _launch_updater_and_quit(root))
-    # We'll place it on the top-right when needed
+    shell = tk.Frame(root, bg=base_bg)
+    shell.pack(fill=tk.BOTH, expand=True)
+
+    header_bg = Theme.header_bg if Theme.active else base_bg
+    header = tk.Frame(shell, bg=header_bg, height=76)
+    header.pack(fill=tk.X, side=tk.TOP)
+    header.pack_propagate(False)
+
+    hero_frame = tk.Frame(header, bg=header_bg)
+    hero_frame.pack(side=tk.LEFT, padx=24)
+    hero_icon = _load_image("braindrive.png", (48, 48))
+    if hero_icon:
+        tk.Label(hero_frame, image=hero_icon, bg=header_bg).pack(side=tk.LEFT, padx=(0, 12))
+    title_block = tk.Frame(hero_frame, bg=header_bg)
+    title_block.pack(side=tk.LEFT)
+    title_text = tk.Label(
+        title_block,
+        text=runner_name,
+        font=("Arial", 18, "bold"),
+        bg=header_bg,
+        fg=Theme.text if Theme.active else "black",
+    )
+    title_text.pack(anchor="w")
+    tk.Label(
+        title_block,
+        text="ChatGPT alternative you fully own and control",
+        font=("Arial", 11),
+        bg=header_bg,
+        fg=Theme.muted if Theme.active else "black",
+    ).pack(anchor="w")
+
+    header_actions = tk.Frame(header, bg=header_bg)
+    header_actions.pack(side=tk.RIGHT, padx=24)
+
+    os_controls = tk.Frame(header_actions, bg=header_bg)
+    os_controls.pack(side=tk.RIGHT, padx=(0, 12))
+
+    def _open_settings_from_header():
+        try:
+            braindrive_instance.open_settings_dialog()
+        except Exception as exc:
+            logger.error(f"Failed to open settings dialog: {exc}")
+
+    settings_button = tk.Button(
+        os_controls,
+        text="⚙",
+        font=("Segoe UI Symbol", 16, "bold"),
+        command=_open_settings_from_header,
+        bg=header_bg,
+        fg=Theme.text if Theme.active else "black",
+        activebackground=header_bg,
+        activeforeground=Theme.accent if Theme.active else "black",
+        relief=tk.FLAT,
+        bd=0,
+        highlightthickness=0,
+        cursor="hand2",
+    )
+    settings_button.pack(side=tk.RIGHT, padx=(8, 0), pady=2)
+
+    os_label = tk.Label(
+        os_controls,
+        text=os_text,
+        font=("Arial", 10),
+        bg=header_bg,
+        fg=Theme.muted if Theme.active else "black",
+    )
+    os_label.pack(side=tk.RIGHT, padx=(0, 6))
+
+    update_button = ttk.Button(
+        header_actions,
+        text="Update available",
+        command=lambda: _launch_updater_and_quit(root),
+        style="Dark.TButton",
+    )
+    update_button.pack(side=tk.RIGHT, padx=(0, 12))
+    update_button.pack_forget()
+
+    def _reveal_update_button(label_text: str):
+        def _show():
+            update_button.config(text=label_text)
+            update_button.pack(side=tk.RIGHT, padx=(0, 12))
+        root.after(0, _show)
 
     # Create card instances
     ollama_instance = Ollama()
-    braindrive_instance = BrainDrive()
 
-    # Middle section
-    middle_kwargs = {"height": 340, "width": 600}
-    if Theme.active:
-        middle_kwargs.update(bg=Theme.bg)
-    middle_frame = tk.Frame(root, **middle_kwargs)
-    middle_frame.pack(fill=tk.BOTH, expand=True)
+    body = tk.Frame(shell, bg=base_bg)
+    body.pack(fill=tk.BOTH, expand=True)
 
-    # Left group
-    left_kwargs = {"width": 400, "height": 320, "relief": tk.RIDGE, "bd": 2}
-    if Theme.active:
-        left_kwargs.update(bg=Theme.bg)
-    left_group = tk.Frame(middle_frame, **left_kwargs)
+    content = tk.Frame(body, bg=base_bg)
+    content.pack(fill=tk.BOTH, expand=True, padx=24, pady=(12, 20))
+
+    cards_wrapper = tk.Frame(content, bg=base_bg)
+    cards_wrapper.pack(fill=tk.BOTH, expand=True)
+    cards_wrapper.grid_columnconfigure(0, weight=1, uniform="card")
+    cards_wrapper.grid_columnconfigure(1, weight=1, uniform="card")
+    cards_wrapper.grid_rowconfigure(0, weight=1)
+
+    card_kwargs = {
+        "bg": Theme.panel_bg_alt if Theme.active else "white",
+        "highlightbackground": Theme.border_soft if Theme.active else "grey80",
+        "highlightthickness": 1,
+        "bd": 0,
+    }
+    left_group = tk.Frame(cards_wrapper, height=360, **card_kwargs)
+    left_group.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
     left_group.pack_propagate(False)
-    left_group.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    # Right group
-    right_kwargs = {"width": 400, "height": 320, "relief": tk.RIDGE, "bd": 2}
-    if Theme.active:
-        right_kwargs.update(bg=Theme.bg)
-    right_group = tk.Frame(middle_frame, **right_kwargs)
+    right_group = tk.Frame(cards_wrapper, height=360, **card_kwargs)
+    right_group.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
     right_group.pack_propagate(False)
-    right_group.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-
-    # Bottom status section
-    status_display = StatusDisplay(root)
-    step_label, details_label, progress_bar = status_display.get_components()
-    status_updater = StatusUpdater(step_label, details_label, progress_bar)
+    metadata_values = {
+        "os": os_text,
+        "disk": disk_text.replace("Disk space:", "").strip(),
+        "installPath": _format_install_path(config.base_path),
+        "version": version_text.replace("Version:", "").strip(),
+    }
+    status_section = tk.Frame(content, bg=base_bg)
+    status_section.pack(fill=tk.X, expand=False, pady=(20, 0))
+    status_display = StatusDisplay(status_section, inset=0, metadata=metadata_values, lock_width=False)
+    status_display.frame.pack(fill=tk.BOTH, expand=True)
     config.status_display = status_display
-    # Display cards with status_updater
+    status_updater = config.status_updater
+
+    status_display.register_action("install", lambda: braindrive_instance.install(status_updater))
+    status_display.register_action("resume", lambda: braindrive_instance.install(status_updater))
+    status_display.register_action("retry", lambda: braindrive_instance.install(status_updater))
+
     braindrive_instance.display(left_group, status_updater)
     ollama_instance.display(right_group, status_updater)
+    status_display.set_installed_status(braindrive_installed)
 
     # Setup cleanup handler for proper shutdown
+    _cleanup_state = {"ran": False}
+
     def cleanup_on_exit():
         """Clean up all running processes when the application exits."""
+        if _cleanup_state["ran"]:
+            return
+        _cleanup_state["ran"] = True
         logger.info("Cleaning up running processes before exit...")
         try:
             # Stop BrainDrive services if running
@@ -170,12 +345,32 @@ def main():
             logger.error(f"Error during cleanup: {e}")
         logger.info("Cleanup completed")
 
+    _closing_state = {"active": False}
+
+    def _handle_window_close():
+        if _closing_state["active"]:
+            return
+        _closing_state["active"] = True
+        try:
+            status_display.show_shutdown("Shutting down BrainDrive...")
+        except Exception:
+            pass
+
+        def _do_cleanup():
+            try:
+                cleanup_on_exit()
+            finally:
+                root.after(0, lambda: (status_display.hide_shutdown(), root.destroy()))
+
+        threading.Thread(target=_do_cleanup, daemon=True).start()
+
     # Register cleanup handler for window close event
-    root.protocol("WM_DELETE_WINDOW", lambda: (cleanup_on_exit(), root.destroy()))
+    root.protocol("WM_DELETE_WINDOW", _handle_window_close)
 
     # Add log file info to status display
     log_file_path = get_log_file_path()
     logger.info(f"Log file location: {log_file_path}")
+    status_display.set_log_file(log_file_path)
     
     # Background: check for updates and toggle button visibility
     def _toggle_update_if_available():
@@ -185,8 +380,8 @@ def main():
             if latest and current:
                 try:
                     if Version(_normalize_version(latest)) > Version(_normalize_version(current)):
-                        # Show button on UI thread
-                        root.after(0, lambda: update_button.place(relx=0.95, rely=0.2, anchor="ne"))
+                        label = f"Update available ({latest})"
+                        _reveal_update_button(label)
                 except Exception:
                     pass
         except Exception:
@@ -206,13 +401,32 @@ def main():
         cleanup_on_exit()
 
 
-if __name__ == "__main__":
-    main()
-
-
 # -----------------------
 # Update helper functions
 # -----------------------
+
+def _format_disk_summary(target_path: str) -> str:
+    """Return formatted disk space string for footer."""
+    try:
+        path = target_path if target_path and os.path.exists(target_path) else str(Path.home())
+        total, used, free = shutil.disk_usage(path)
+        free_gb = free / (1024 ** 3)
+        return f"Disk space: {free_gb:.0f} GB free"
+    except Exception:
+        return "Disk space: calculating..."
+
+def _format_install_path(path: str) -> str:
+    """Shorten install path for footer display."""
+    if not path:
+        return "Not set"
+    try:
+        resolved = Path(path)
+        display = str(resolved)
+        if len(display) <= 48:
+            return display
+        return f"{display[:18]}…{display[-24:]}"
+    except Exception:
+        return path
 
 def _normalize_version(ver: str) -> str:
     if ver.lower().startswith("v"):
@@ -254,7 +468,7 @@ def _get_current_installer_version() -> str:
         pass
 
     # Windows: as a simple cross-platform fallback, return default embedded string
-    return "1.0.2"
+    return "1.0.3"
 
 
 def _get_latest_release_version() -> str:
@@ -349,3 +563,7 @@ def _open_releases_page() -> None:
         webbrowser.open(url)
     except Exception:
         pass
+
+
+if __name__ == "__main__":
+    main()

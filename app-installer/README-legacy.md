@@ -13,7 +13,7 @@ A cross-platform GUI installer for setting up and managing BrainDrive AI platfor
 - **Cross-Platform Support:** Works seamlessly on Windows, macOS, and Linux
 - **Automated Environment Setup:** Creates conda environments with Python 3.11, Node.js, and Git
 - **BrainDrive Installation:** Clones and configures the complete BrainDrive platform
-- **Dual Server Management:** Manages both FastAPI backend (port 8005) and React frontend (port 5173)
+- **Dual Server Management:** Manages both FastAPI backend and React frontend with automatic port pair selection (8005/5173 → 8505/5573 → 8605/5673)
 - **Plugin System:** Automatically builds and configures BrainDrive plugins
 - **Graphical User Interface:** Intuitive interface for installation, updates, and server management
 - **Process Management:** Advanced process lifecycle management with monitoring
@@ -98,10 +98,8 @@ A cross-platform GUI installer for setting up and managing BrainDrive AI platfor
 
 3. **Start BrainDrive:**
    - Once installation is complete, click **"Start BrainDrive"**
-   - The installer will launch both servers:
-     - Backend server: `http://localhost:8005`
-     - Frontend server: `http://localhost:5173`
-   - Your default browser will open to the BrainDrive interface
+   - The installer evaluates the preferred port pairs `(8005/5173)`, `(8505/5573)`, `(8605/5673)` and launches both servers on the first free pair.
+   - Your default browser will open to the BrainDrive interface on the selected ports (for example `http://localhost:8505` / `http://localhost:5573` if the defaults are busy)
 
 4. **Manage BrainDrive:**
    - **Update:** Click "Update BrainDrive" to get the latest version
@@ -151,7 +149,7 @@ A cross-platform GUI installer for setting up and managing BrainDrive AI platfor
 - Run as administrator/sudo if permission errors occur
 
 **Servers Won't Start:**
-- Check if ports 8005 and 5173 are available
+- Check whether at least one of the managed port pairs (8005/5173, 8505/5573, 8605/5673) is free
 - Verify conda environment was created successfully
 - Check the application logs for specific error messages
 
@@ -242,7 +240,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Version Information
 
-**Current Version:** 1.0.2  
+**Current Version:** 1.0.3  
 **BrainDrive Compatibility:** Latest  
 **Last Updated:** February 2025
 

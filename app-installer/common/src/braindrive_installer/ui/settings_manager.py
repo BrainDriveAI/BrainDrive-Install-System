@@ -3,30 +3,24 @@ import os
 import secrets
 import tempfile
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
 
 from braindrive_installer.core.installer_state import InstallerState
 from braindrive_installer.core.platform_utils import PlatformUtils
 from braindrive_installer.core.installer_logger import get_installer_logger
+from braindrive_installer.core.port_selector import (
+    DEFAULT_PORT_PAIRS,
+    select_available_port_pair,
+)
 
 class BrainDriveSettingsManager:
     """Manages BrainDrive configuration settings with JSON persistence and template generation."""
     
     def __init__(self, installation_path: str):
         self.installation_path = installation_path
-        self.settings_file = os.path.join(installation_path, "braindrive_settings.json")
-        # On macOS, avoid writing into the app bundle. Prefer Application Support.
-        try:
-            import sys
-            from pathlib import Path
-            abs_install = os.path.abspath(self.installation_path or "")
-            if sys.platform == "darwin" and ".app/Contents/MacOS" in abs_install:
-                app_support = os.path.join(Path.home(), "Library", "Application Support", "BrainDriveInstaller")
-                os.makedirs(app_support, exist_ok=True)
-                self.settings_file = os.path.join(app_support, "braindrive_settings.json")
-        except Exception:
-            # Best-effort fallback; keep original path
-            pass
+        data_dir = Path(InstallerState.get_data_directory(ensure=True))
+        self.settings_file = str(data_dir / InstallerState.SETTINGS_FILENAME)
         self.backend_env_file = os.path.join(installation_path, "backend", ".env")
         self.frontend_env_file = os.path.join(installation_path, "frontend", ".env")
         self.settings = self._load_settings()
@@ -45,21 +39,36 @@ class BrainDriveSettingsManager:
                     return normalized_saved
             except ValueError:
                 return normalized_saved
+        preferred = PlatformUtils.get_default_install_dir()
+        if preferred:
+            return os.path.abspath(preferred)
         executable_dir = PlatformUtils.get_executable_directory()
         if executable_dir:
             return executable_dir
         return PlatformUtils.get_braindrive_base_path()
     
+    def _choose_default_ports(self) -> Tuple[int, int]:
+        """
+        Detect the best default port pair using the preferred list.
+        """
+        try:
+            backend_port, frontend_port = select_available_port_pair()
+            return backend_port, frontend_port
+        except Exception:
+            # Fall back to the first configured pair if probing fails.
+            return DEFAULT_PORT_PAIRS[0]
+
     def _get_default_settings(self) -> Dict[str, Any]:
         """Get default settings configuration"""
+        backend_port, frontend_port = self._choose_default_ports()
         return {
-            "version": "1.0.2",
+            "version": "1.0.3",
             "last_modified": datetime.utcnow().isoformat() + "Z",
             "network": {
                 "backend_host": "localhost",
-                "backend_port": 8005,
+                "backend_port": backend_port,
                 "frontend_host": "localhost",
-                "frontend_port": 5173
+                "frontend_port": frontend_port
             },
             "security": {
                 "enable_registration": True,
