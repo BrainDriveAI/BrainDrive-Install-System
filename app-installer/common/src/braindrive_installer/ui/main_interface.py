@@ -13,9 +13,9 @@ from braindrive_installer.ui.card_braindrive import BrainDrive
 from braindrive_installer.ui.status_display import StatusDisplay
 from braindrive_installer.ui.theme import Theme
 from braindrive_installer.config.AppConfig import AppConfig
-from braindrive_installer.utils.helper_image import HelperImage
 from braindrive_installer.integration.AppDesktopIntegration import AppDesktopIntegration
 from braindrive_installer.core.installer_logger import get_installer_logger, get_log_file_path
+from braindrive_installer.core.platform_utils import PlatformUtils
 from pathlib import Path
 
 # Update check deps
@@ -28,6 +28,60 @@ try:
     import importlib.resources as pkg_resources  # Python 3.9+
 except Exception:  # pragma: no cover - fallback for older
     pkg_resources = None
+
+
+def _resolve_asset_path(filename: str):
+    """Return a path to the requested asset without writing into the install directory."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        meipass_path = Path(meipass)
+        candidates.append(meipass_path / filename)
+        candidates.append(meipass_path / "assets" / filename)
+
+    if pkg_resources is not None:
+        try:
+            asset = pkg_resources.files("braindrive_installer") / filename
+            candidates.append(asset)
+            candidates.append(pkg_resources.files("braindrive_installer") / "assets" / filename)
+        except Exception:
+            pass
+
+    resolved_file = Path(__file__).resolve()
+    base_common = resolved_file.parents[3]
+    project_root = resolved_file.parents[4]
+    candidates.append(base_common / "assets" / filename)
+    candidates.append(project_root / "windows" / filename)
+    candidates.append(project_root / "common" / "assets" / filename)
+
+    for candidate in candidates:
+        try:
+            if candidate and Path(candidate).is_file():
+                return str(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def _ensure_executable_asset(filename: str):
+    """Copy the given asset next to the running executable if it is not already present."""
+    exe_dir = Path(PlatformUtils.get_executable_directory())
+    dest = exe_dir / filename
+    if dest.exists():
+        return str(dest)
+
+    source = _resolve_asset_path(filename)
+    if not source:
+        return None
+
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, dest)
+        return str(dest)
+    except Exception:
+        logger = get_installer_logger()
+        logger.warning(f"Failed to copy {filename} to executable directory: {source}")
+        return source
 
 def main():
     # Initialize logging first
@@ -49,38 +103,60 @@ def main():
     base_bg = Theme.bg if Theme.active else "lightgrey"
     root.configure(bg=base_bg)
 
-    try:
-        desktop_integration = AppDesktopIntegration()
-        icon_path = desktop_integration.setup_application_icon()
+    if braindrive_installed:
+        try:
+            desktop_integration = AppDesktopIntegration()
+            icon_path = desktop_integration.setup_application_icon()
 
-        # On Windows, Tk expects .ico; on macOS use iconphoto with PNG
+            if platform.system() == "Windows":
+                local_icon = _ensure_executable_asset("braindriveai.ico") or icon_path
+                if local_icon:
+                    try:
+                        root.iconbitmap(local_icon)
+                    except Exception:
+                        pass
+            else:
+                png_path = _ensure_executable_asset("braindrive.png") or _resolve_asset_path("braindrive.png")
+                if png_path:
+                    try:
+                        photo = tk.PhotoImage(file=png_path)
+                        root.iconphoto(True, photo)
+                    except Exception:
+                        pass
+
+            def background_task():
+                try:
+                    desktop_integration.verify_exe_exists()
+                    desktop_integration.verify_and_update_icon()
+                except Exception:
+                    pass
+
+            threading.Thread(target=background_task, daemon=True).start()
+
+        except Exception as e:
+            logger.error(f"Failed to set application icon: {e}")
+            print(f"Failed to set application icon: {e}")
+    else:
         if platform.system() == "Windows":
-            try:
-                root.iconbitmap(icon_path)
-            except Exception:
-                pass
+            ico_path = (
+                _ensure_executable_asset("braindriveai.ico")
+                or _ensure_executable_asset("braindrive.ico")
+                or _resolve_asset_path("braindriveai.ico")
+                or _resolve_asset_path("braindrive.ico")
+            )
+            if ico_path:
+                try:
+                    root.iconbitmap(ico_path)
+                except Exception:
+                    pass
         else:
-            try:
-                # Prefer PNG from assets for mac/Linux
-                from braindrive_installer.utils.helper_image import HelperImage
-                png_path = HelperImage.get_image_path("braindrive.png")
-                photo = tk.PhotoImage(file=png_path)
-                root.iconphoto(True, photo)
-            except Exception:
-                pass
-
-        def background_task():
-            try:
-                desktop_integration.verify_exe_exists()
-                desktop_integration.verify_and_update_icon()
-            except Exception:
-                pass
-
-        threading.Thread(target=background_task, daemon=True).start()
-
-    except Exception as e:
-        logger.error(f"Failed to set application icon: {e}")
-        print(f"Failed to set application icon: {e}")
+            png_path = _ensure_executable_asset("braindrive.png") or _resolve_asset_path("braindrive.png")
+            if png_path:
+                try:
+                    photo = tk.PhotoImage(file=png_path)
+                    root.iconphoto(True, photo)
+                except Exception:
+                    pass
 
  
     root.geometry("1220x720")
@@ -106,8 +182,10 @@ def main():
     ui_images = []
 
     def _load_image(filename: str, size=(48, 48)):
+        path = _resolve_asset_path(filename)
+        if not path:
+            return None
         try:
-            path = HelperImage.get_image_path(filename)
             image = Image.open(path).convert("RGBA")
             image.thumbnail(size, Image.LANCZOS)
             photo = ImageTk.PhotoImage(image)

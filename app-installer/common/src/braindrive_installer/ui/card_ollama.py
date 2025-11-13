@@ -45,7 +45,7 @@ class Ollama(BaseCard):
         def ollama_install_task():
             try:
                 self.config.status_updater.update_status(
-                    "Step: [1/3] Downloading Ollama...",
+                    "Downloading Ollama...",
                     "Downloading the Ollama installer. Please wait.",
                     0,
                 )
@@ -61,7 +61,7 @@ class Ollama(BaseCard):
                     out_file.write(data)
 
                 self.config.status_updater.update_status(
-                        "Step: [2/3] Running Installer...",
+                        "Running Installer...",
                         "Running the Ollama installer. Follow the on-screen instructions.",
                         50,
                     )
@@ -70,7 +70,7 @@ class Ollama(BaseCard):
                 subprocess.Popen(installer_path, shell=True)
 
                 self.config.status_updater.update_status(
-                        "Step: [3/3] Ollama Installation Started",
+                        "Ollama Installation Started",
                         "The Ollama install inferface should be visible soon.",
                         100,
                     )

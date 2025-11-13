@@ -76,12 +76,10 @@ class AppConfig:
             normalized_exec = os.path.abspath(executable_dir)
             if "/Contents/MacOS" in normalized_exec or normalized_exec.endswith("/MacOS"):
                 if preferred_normalized:
-                    PlatformUtils.create_directory_if_not_exists(preferred_normalized)
                     return preferred_normalized
 
         if preferred_normalized:
-            if PlatformUtils.create_directory_if_not_exists(preferred_normalized):
-                return preferred_normalized
+            return preferred_normalized
 
         if executable_dir and os.path.isdir(executable_dir):
             return executable_dir

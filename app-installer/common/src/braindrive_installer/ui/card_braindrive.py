@@ -262,7 +262,7 @@ class BrainDrive(BaseCard):
 
                 if status_updater:
                     status_updater.update_status(
-                        "Step: Starting BrainDrive Services...",
+                        "Starting BrainDrive Services...",
                         "Launching backend and frontend servers. Please wait...",
                         25,
                     )
@@ -393,7 +393,7 @@ class BrainDrive(BaseCard):
             try:
                 if status_updater:
                     status_updater.update_status(
-                        "Step: [1/2] Updating BrainDrive...",
+                        "Updating BrainDrive...",
                         "Fetching latest code from the repository.",
                         50,
                     )
@@ -405,7 +405,7 @@ class BrainDrive(BaseCard):
                 if success:
                     if status_updater:
                         status_updater.update_status(
-                            "Step: [2/2] Update Complete",
+                            "Update Complete",
                             "BrainDrive has been updated successfully.",
                             100,
                         )

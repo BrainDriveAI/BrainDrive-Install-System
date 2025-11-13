@@ -3,6 +3,7 @@ import os
 import secrets
 import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 from braindrive_installer.core.installer_state import InstallerState
@@ -18,19 +19,8 @@ class BrainDriveSettingsManager:
     
     def __init__(self, installation_path: str):
         self.installation_path = installation_path
-        self.settings_file = os.path.join(installation_path, "braindrive_settings.json")
-        # On macOS, avoid writing into the app bundle. Prefer Application Support.
-        try:
-            import sys
-            from pathlib import Path
-            abs_install = os.path.abspath(self.installation_path or "")
-            if sys.platform == "darwin" and ".app/Contents/MacOS" in abs_install:
-                app_support = os.path.join(Path.home(), "Library", "Application Support", "BrainDriveInstaller")
-                os.makedirs(app_support, exist_ok=True)
-                self.settings_file = os.path.join(app_support, "braindrive_settings.json")
-        except Exception:
-            # Best-effort fallback; keep original path
-            pass
+        data_dir = Path(InstallerState.get_data_directory(ensure=True))
+        self.settings_file = str(data_dir / InstallerState.SETTINGS_FILENAME)
         self.backend_env_file = os.path.join(installation_path, "backend", ".env")
         self.frontend_env_file = os.path.join(installation_path, "frontend", ".env")
         self.settings = self._load_settings()
@@ -49,6 +39,9 @@ class BrainDriveSettingsManager:
                     return normalized_saved
             except ValueError:
                 return normalized_saved
+        preferred = PlatformUtils.get_default_install_dir()
+        if preferred:
+            return os.path.abspath(preferred)
         executable_dir = PlatformUtils.get_executable_directory()
         if executable_dir:
             return executable_dir

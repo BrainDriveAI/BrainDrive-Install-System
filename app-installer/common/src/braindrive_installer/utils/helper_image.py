@@ -33,6 +33,7 @@ class HelperImage:
 
         # Check the AppConfig base path
         app_config_path = Path(app_config.base_path) / image_name
+        install_dir_exists = app_config_path.parent.exists()
         if app_config_path.exists():
             if callback:
                 callback(str(app_config_path))
@@ -51,15 +52,18 @@ class HelperImage:
         # Extract the file from the first matching source path
         for source_path in candidate_sources:
             if source_path.exists():
-                try:
-                    app_config_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(source_path), str(app_config_path))
-                    print(f"Extracted '{image_name}' to '{app_config_path}'.")
-                    if callback:
-                        callback(str(app_config_path))
-                    return str(app_config_path)
-                except Exception as e:
-                    raise RuntimeError(f"Failed to extract '{image_name}': {e}")
+                if install_dir_exists:
+                    try:
+                        app_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(str(source_path), str(app_config_path))
+                        print(f"Extracted '{image_name}' to '{app_config_path}'.")
+                        if callback:
+                            callback(str(app_config_path))
+                        return str(app_config_path)
+                    except Exception as e:
+                        raise RuntimeError(f"Failed to extract '{image_name}': {e}")
+                # Installer directory not created yet; return source directly
+                return str(source_path)
 
         raise FileNotFoundError(
             f"Image '{image_name}' not found in '{target_path}', '{app_config_path}', or any asset search paths."

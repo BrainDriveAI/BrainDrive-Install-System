@@ -3,6 +3,7 @@ Cross-platform compatibility utilities for BrainDrive Installer.
 Handles OS detection, path management, and platform-specific operations.
 """
 
+import hashlib
 import os
 import sys
 import platform
@@ -43,7 +44,76 @@ class PlatformUtils:
             Path: User's home directory path
         """
         return Path.home()
-    
+
+    @staticmethod
+    def _hash_for_path(path_value: str) -> str:
+        """Return a short, stable hash for a filesystem path."""
+        normalized = os.path.normcase(os.path.abspath(path_value or ""))
+        return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:12]
+
+    @staticmethod
+    def _get_appdata_base_dir() -> Path:
+        """Return the per-user data directory used for fallbacks."""
+        os_type = PlatformUtils.get_os_type()
+        if os_type == "windows":
+            base = os.getenv("APPDATA")
+            if base:
+                return Path(base)
+            return PlatformUtils.get_home_directory() / "AppData" / "Roaming"
+        if os_type == "macos":
+            return PlatformUtils.get_home_directory() / "Library" / "Application Support"
+        return PlatformUtils.get_home_directory() / ".local" / "share"
+
+    @staticmethod
+    def get_installer_data_dir(executable_dir: Optional[str] = None) -> str:
+        """
+        Preferred directory for storing installer-specific state.
+        Tries to keep data beside the executable; falls back to AppData-style paths.
+        """
+        exe_dir = executable_dir or PlatformUtils.get_executable_directory() or os.getcwd()
+        exe_path = Path(exe_dir)
+        try:
+            exe_path = exe_path.resolve()
+        except Exception:
+            exe_path = exe_path.absolute()
+
+        base_dir = exe_path
+        if PlatformUtils.get_os_type() == "macos":
+            mac_str = str(exe_path)
+            if "Contents/MacOS" in mac_str:
+                try:
+                    base_dir = exe_path.parents[1] / "Resources"
+                except IndexError:
+                    base_dir = exe_path
+
+        digest = PlatformUtils._hash_for_path(str(exe_path))
+        local_dir = base_dir / "BrainDriveInstaller" / digest
+
+        try:
+            local_dir.mkdir(parents=True, exist_ok=True)
+            test_file = local_dir / ".write-test"
+            with test_file.open("w", encoding="utf-8") as handle:
+                handle.write("ok")
+            test_file.unlink(missing_ok=True)
+            return str(local_dir)
+        except Exception:
+            pass
+
+        fallback_dir = PlatformUtils._get_appdata_base_dir() / "BrainDriveInstaller" / digest
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        return str(fallback_dir)
+
+    @staticmethod
+    def get_default_install_dir() -> str:
+        """
+        Return the preferred per-user install directory (~/BrainDrive or %USERPROFILE%\\BrainDrive).
+
+        Returns:
+            str: Absolute path under the user's home directory.
+        """
+        home_dir = PlatformUtils.get_home_directory()
+        return str(home_dir / "BrainDrive")
+
     @staticmethod
     def get_braindrive_base_path() -> str:
         """
@@ -52,16 +122,7 @@ class PlatformUtils:
         Returns:
             str: Platform-appropriate base path
         """
-        home = PlatformUtils.get_home_directory()
-        os_type = PlatformUtils.get_os_type()
-        if os_type == 'windows':
-            program_files = os.getenv("PROGRAMFILES")
-            if program_files:
-                return str(Path(program_files) / "BrainDrive")
-            return str(home / "BrainDrive")
-        if os_type == 'macos':
-            return str(home / "Applications" / "BrainDrive")
-        return str(home / "BrainDrive")
+        return PlatformUtils.get_default_install_dir()
     
     @staticmethod
     def get_executable_directory() -> str:
@@ -330,13 +391,24 @@ class PlatformUtils:
         Returns:
             int: Free disk space in bytes
         """
+        import shutil
+
+        target = path or os.getcwd()
+        target_path = Path(target)
+
+        if not target_path.exists():
+            candidate = target_path.anchor or (target_path.drive if hasattr(target_path, "drive") else None)
+            if not candidate and target_path.parents:
+                for parent in target_path.parents:
+                    if parent.exists():
+                        candidate = str(parent)
+                        break
+            if not candidate:
+                candidate = os.getcwd()
+            target = candidate
+
         try:
-            if PlatformUtils.get_os_type() == 'windows':
-                import shutil
-                return shutil.disk_usage(path).free
-            else:
-                import shutil
-                return shutil.disk_usage(path).free
+            return shutil.disk_usage(target).free
         except Exception:
             return 0
     
