@@ -604,66 +604,63 @@ class BrainDrive(BaseCard):
         card_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
         card_frame.pack_propagate(False)
 
-        def _resolve_icon_path(name: str):
+        def _resolve_icon(name: str):
+            """
+            Resolve the BrainDrive icon without touching the install directory.
+            This keeps the in-app branding consistent with the packaged asset.
+            """
+            # 1) Packaged assets inside the braindrive_installer package
             try:
                 data_path = resources.files("braindrive_installer") / "assets" / name
                 with resources.as_file(data_path) as handle:
-                    return handle
+                    if handle.exists():
+                        return handle
             except Exception:
                 pass
-            candidates = []
-            try:
-                helper_path = HelperImage.get_image_path(name)
-                candidates.append(Path(helper_path))
-            except Exception:
-                pass
+
+            # 2) PyInstaller bundle locations (_MEIPASS)
             base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+            candidates = [
+                base_dir / name,
+                base_dir / "assets" / name,
+            ]
+
+            # 3) Source tree / shared assets when running from source
+            repo_common_assets = Path(__file__).resolve().parents[3] / "assets"
+            top_level_assets = Path(__file__).resolve().parents[4] / "assets"
             candidates.extend(
                 [
-                    base_dir / name,
-                    base_dir / "assets" / name,
-                    Path(__file__).resolve().parents[4] / "assets" / name,
+                    repo_common_assets / name,
+                    top_level_assets / name,
                 ]
             )
+
             for candidate in candidates:
-                if candidate and candidate.exists():
-                    return candidate
+                try:
+                    if candidate and candidate.exists():
+                        return candidate
+                except Exception:
+                    continue
             return None
 
         def _load_icon():
-            img = None
-            try:
-                asset_path = resources.files("braindrive_installer") / "assets" / "braindrive.png"
-                with asset_path.open("rb") as data:
-                    img = Image.open(BytesIO(data.read())).convert("RGBA")
-                self.logger.debug(f"Loaded BrainDrive icon from packaged assets: {asset_path}")
-            except Exception as exc:
-                self.logger.debug(f"Packaged BrainDrive icon load failed: {exc}")
+            card_image = None
+            icon_path = _resolve_icon("braindrive.png")
 
-            if img is None:
-                path = _resolve_icon_path("braindrive.png")
-                if path:
-                    try:
-                        img = Image.open(path).convert("RGBA")
-                        self.logger.debug(f"Loaded BrainDrive icon from {path}")
-                    except Exception as exc:
-                        self.logger.warning(f"BrainDrive icon at {path} failed to load: {exc}")
+            if icon_path is not None:
+                try:
+                    card_image = Image.open(icon_path).convert("RGBA")
+                    self.logger.debug(f"Loaded BrainDrive icon from {icon_path}")
+                except Exception as exc:
+                    self.logger.warning(f"BrainDrive icon at {icon_path} failed to load: {exc}")
 
-            if img is None:
-                placeholder_path = Path(__file__).resolve().parents[4] / "common" / "assets" / "braindrive.png"
-                if placeholder_path.exists():
-                    try:
-                        img = Image.open(placeholder_path).convert("RGBA")
-                        self.logger.debug(f"Loaded fallback icon from common assets: {placeholder_path}")
-                    except Exception as exc:
-                        self.logger.warning(f"Fallback BrainDrive icon load failed: {exc}")
-
-            if img is None:
+            if card_image is None:
+                # As a last resort, generate a simple placeholder so the UI never breaks
                 self.logger.warning("Falling back to generated placeholder BrainDrive icon.")
-                img = Image.new("RGBA", (64, 64), color=Theme.accent if Theme.active else "#4a90e2")
+                card_image = Image.new("RGBA", (64, 64), color=Theme.accent if Theme.active else "#4a90e2")
 
-            img.thumbnail((64, 64), Image.LANCZOS)
-            return ImageTk.PhotoImage(img)
+            card_image.thumbnail((64, 64), Image.LANCZOS)
+            return ImageTk.PhotoImage(card_image)
 
         header = tk.Frame(card_frame, bg=card_bg)
         header.pack(fill=tk.X, padx=22, pady=(18, 10))

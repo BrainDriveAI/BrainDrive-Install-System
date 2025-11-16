@@ -18,6 +18,9 @@ from braindrive_installer.core.installer_logger import get_installer_logger, get
 from braindrive_installer.core.platform_utils import PlatformUtils
 from pathlib import Path
 
+# Shared reference so other UI components can reuse the exact same BrainDrive icon
+HERO_ICON_IMAGE = None
+
 # Update check deps
 import json
 import time
@@ -205,6 +208,10 @@ def main():
     hero_frame = tk.Frame(header, bg=header_bg)
     hero_frame.pack(side=tk.LEFT, padx=24)
     hero_icon = _load_image("braindrive.png", (48, 48))
+    # Expose the hero icon so other UI components (e.g., the BrainDrive card)
+    # can reuse the exact same image instance for visual consistency.
+    global HERO_ICON_IMAGE
+    HERO_ICON_IMAGE = hero_icon
     if hero_icon:
         tk.Label(hero_frame, image=hero_icon, bg=header_bg).pack(side=tk.LEFT, padx=(0, 12))
     title_block = tk.Frame(hero_frame, bg=header_bg)
@@ -237,20 +244,35 @@ def main():
         except Exception as exc:
             logger.error(f"Failed to open settings dialog: {exc}")
 
-    settings_button = tk.Button(
+    if sys.platform == "win32":
+        settings_font = ("Segoe UI Symbol", 16, "bold")
+    else:
+        settings_font = ("Arial", 16, "bold")
+
+    settings_button = tk.Label(
         os_controls,
         text="⚙",
-        font=("Segoe UI Symbol", 16, "bold"),
-        command=_open_settings_from_header,
+        font=settings_font,
         bg=header_bg,
         fg=Theme.text if Theme.active else "black",
-        activebackground=header_bg,
-        activeforeground=Theme.accent if Theme.active else "black",
-        relief=tk.FLAT,
-        bd=0,
-        highlightthickness=0,
         cursor="hand2",
     )
+
+    def _on_settings_hover(_event):
+        try:
+            settings_button.config(fg=Theme.accent if Theme.active else "black")
+        except Exception:
+            pass
+
+    def _on_settings_leave(_event):
+        try:
+            settings_button.config(fg=Theme.text if Theme.active else "black")
+        except Exception:
+            pass
+
+    settings_button.bind("<Button-1>", lambda e: _open_settings_from_header())
+    settings_button.bind("<Enter>", _on_settings_hover)
+    settings_button.bind("<Leave>", _on_settings_leave)
     settings_button.pack(side=tk.RIGHT, padx=(8, 0), pady=2)
 
     os_label = tk.Label(
