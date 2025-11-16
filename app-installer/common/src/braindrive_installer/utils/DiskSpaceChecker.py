@@ -1,5 +1,6 @@
 import os
 import shutil
+from pathlib import Path
 from braindrive_installer.config.AppConfig import AppConfig
 
 class DiskSpaceChecker:
@@ -21,11 +22,19 @@ class DiskSpaceChecker:
             # Convert required space from string to float
             required_space_gb = float(required_space_gb)
 
-            # Determine the path to check
-            path_to_check = self.base_path
-            if not os.path.exists(self.base_path):
-                print(f"Base path does not exist. Falling back to the drive: {os.path.splitdrive(self.base_path)[0]}")
-                path_to_check = os.path.splitdrive(self.base_path)[0]  # Use the drive, e.g., "C:\\"
+            # Determine the path to check. If the configured base path does not
+            # exist yet (common before first install), walk up its parents until
+            # we find an existing directory. This avoids Windows-style drive
+            # handling that does not apply on macOS/Linux.
+            path_to_check = self.base_path or str(Path.home())
+            candidate = Path(path_to_check)
+            if not candidate.exists():
+                for parent in candidate.parents:
+                    if parent.exists():
+                        path_to_check = str(parent)
+                        break
+                else:
+                    path_to_check = str(Path.home())
 
             # Get the free space in bytes
             total, used, free = shutil.disk_usage(path_to_check)
