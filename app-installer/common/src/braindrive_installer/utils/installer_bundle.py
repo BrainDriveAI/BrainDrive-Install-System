@@ -11,6 +11,24 @@ from braindrive_installer.core.installer_state import InstallerState
 _logger = get_installer_logger()
 
 
+_BUNDLE_ALLOWLIST_BY_OS = {
+    "windows": {
+        "braindriveai.ico",
+        "BrainDriveInstaller",
+        "BrainDriveInstaller-win-x64.exe",
+        "logs",
+    }
+}
+
+
+def _get_bundle_allowlist() -> Optional[set]:
+    os_type = PlatformUtils.get_os_type()
+    allowlist = _BUNDLE_ALLOWLIST_BY_OS.get(os_type)
+    if not allowlist:
+        return None
+    return set(allowlist)
+
+
 def _safe_copytree(src: Path, dst: Path) -> None:
     """Copy a directory tree, allowing the destination to exist."""
     shutil.copytree(src, dst, dirs_exist_ok=True)
@@ -74,9 +92,28 @@ def sync_installer_bundle(target_base_path: str) -> Optional[str]:
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    allowlist = _get_bundle_allowlist()
+    if allowlist:
+        existing_entries = {entry.name for entry in current_dir.iterdir()}
+        missing = sorted(name for name in allowlist if name not in existing_entries)
+        if missing:
+            _logger.info(
+                "Installer bundle allowlist entries missing from %s: %s",
+                current_dir,
+                ", ".join(missing),
+            )
+    else:
+        _logger.info(
+            "No installer bundle allowlist configured for %s; copying all entries.",
+            PlatformUtils.get_os_type(),
+        )
+
     _logger.info(f"Copying installer bundle contents from {current_dir} to {target_dir}")
     try:
         for entry in current_dir.iterdir():
+            if allowlist and entry.name not in allowlist:
+                _logger.info(f"Skipping non-allowlisted installer bundle entry: {entry.name}")
+                continue
             destination = target_dir / entry.name
             if entry.is_dir():
                 _safe_copytree(entry, destination)

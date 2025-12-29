@@ -123,3 +123,41 @@ def test_sync_installer_bundle_copies_bundle_and_state(monkeypatch, tmp_path):
     new_state = json.loads(state_file.read_text(encoding="utf-8"))
     assert new_state[InstallerState.STATE_KEY_INSTALL_PATH] == "C:/BrainDrive"
     assert new_state[InstallerState.STATE_KEY_INSTALLER_DIR] == str(bundle_dir)
+
+
+def test_sync_installer_bundle_skips_non_allowlisted_entries(monkeypatch, tmp_path):
+    _mock_os_type(monkeypatch, "windows")
+    _mock_home(monkeypatch, tmp_path / "home")
+
+    current_dir = tmp_path / "dist"
+    current_dir.mkdir()
+    (current_dir / "BrainDriveInstaller-win-x64.exe").write_text("exe", encoding="utf-8")
+    (current_dir / "braindriveai.ico").write_text("ico", encoding="utf-8")
+    installer_dir = current_dir / "BrainDriveInstaller"
+    installer_dir.mkdir()
+    (installer_dir / "payload.txt").write_text("payload", encoding="utf-8")
+    logs_dir = current_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "log.txt").write_text("log", encoding="utf-8")
+
+    (current_dir / "extra.txt").write_text("extra", encoding="utf-8")
+    extra_dir = current_dir / "extra-dir"
+    extra_dir.mkdir()
+    (extra_dir / "extra.log").write_text("extra", encoding="utf-8")
+
+    monkeypatch.setattr(PlatformUtils, "get_executable_directory", lambda: str(current_dir))
+
+    install_base = tmp_path / "install-root"
+    install_base.mkdir()
+
+    bundle_path = sync_installer_bundle(str(install_base))
+    assert bundle_path
+    bundle_dir = Path(bundle_path)
+
+    assert (bundle_dir / "BrainDriveInstaller-win-x64.exe").exists()
+    assert (bundle_dir / "braindriveai.ico").exists()
+    assert (bundle_dir / "BrainDriveInstaller" / "payload.txt").exists()
+    assert (bundle_dir / "logs" / "log.txt").exists()
+
+    assert not (bundle_dir / "extra.txt").exists()
+    assert not (bundle_dir / "extra-dir").exists()
