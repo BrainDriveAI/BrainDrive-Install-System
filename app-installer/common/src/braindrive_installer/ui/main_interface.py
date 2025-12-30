@@ -100,7 +100,7 @@ def main():
     except Exception:
         braindrive_installed = False
     runner_name = "BrainDrive Manager" if braindrive_installed else "BrainDrive Installer"
-    root.title(f"{runner_name} [v1.0.3]")
+    root.title(f"{runner_name} [v1.0.4]")
     Theme.apply(root)
     config = AppConfig()
     base_bg = Theme.bg if Theme.active else "lightgrey"
@@ -490,7 +490,7 @@ def _get_current_installer_version() -> str:
         pass
 
     # Windows: as a simple cross-platform fallback, return default embedded string
-    return "1.0.3"
+    return "1.0.4"
 
 
 def _get_latest_release_version() -> str:
