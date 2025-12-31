@@ -5,6 +5,7 @@ import socket
 import subprocess
 import time
 import webbrowser
+import shutil
 from tkinter import messagebox
 from braindrive_installer.integration.AppDesktopIntegration import AppDesktopIntegration
 from braindrive_installer.ui.ButtonStateManager import ButtonStateManager
@@ -572,6 +573,27 @@ class BrainDrive(BaseCard):
             port_part = f":{port}" if port else ""
             return f"http://{browse_host}{port_part}"
 
+    def _format_install_path(self, path: str) -> str:
+        if not path:
+            return "Not set"
+        try:
+            resolved = Path(path)
+            display = str(resolved)
+            if len(display) <= 48:
+                return display
+            return f"{display[:18]}.{display[-24:]}"
+        except Exception:
+            return path
+
+    def _format_disk_summary(self, target_path: str) -> str:
+        try:
+            path = target_path if target_path and os.path.exists(target_path) else str(Path.home())
+            _, _, free = shutil.disk_usage(path)
+            free_gb = free / (1024 ** 3)
+            return f"{free_gb:.0f} GB free"
+        except Exception:
+            return ""
+
     def _check_port_available(self, port):
         """
         Check if a port is available.
@@ -861,36 +883,45 @@ class BrainDrive(BaseCard):
             messagebox.showerror("Settings Error", f"Failed to open settings dialog: {e}")
 
     def _on_settings_applied(self):
-        """Callback when settings are applied - reload settings and update UI"""
+        """Callback when settings are applied."""
         try:
-            # Reload settings in the installer
             self.braindrive_installer._load_settings()
-            
-            # Update card's port values from the installer
+
             self.backend_port = self.braindrive_installer.backend_port
             self.frontend_port = self.braindrive_installer.frontend_port
             self.backend_host = self.braindrive_installer.backend_host
             self.frontend_host = self.braindrive_installer.frontend_host
-            
-            # Update button states based on new settings
+
             self._update_button_states()
-            
-            self.logger.info(f"Settings applied - Updated to Backend: {self.backend_host}:{self.backend_port}, Frontend: {self.frontend_host}:{self.frontend_port}")
-            
+
+            status_display = getattr(self.config, "status_display", None)
+            if status_display:
+                install_path = self._format_install_path(self.config.base_path)
+                disk_summary = self._format_disk_summary(self.config.base_path)
+                metadata = {"installPath": install_path}
+                if disk_summary:
+                    metadata["disk"] = disk_summary
+                status_display.set_metadata(metadata)
+
+            self.logger.info(
+                "Settings applied - Backend %s:%s, Frontend %s:%s, Install base %s",
+                self.backend_host,
+                self.backend_port,
+                self.frontend_host,
+                self.frontend_port,
+                self.config.base_path,
+            )
         except Exception as e:
             self.logger.error(f"Error applying settings: {e}")
             messagebox.showerror("Settings Error", f"Failed to apply settings: {e}")
-            messagebox.showerror("Error", f"Failed to open settings dialog: {str(e)}")
+            return
 
-    def _on_settings_applied(self):
-        """Called when settings are applied"""
-        # Update button states or refresh status
-        self._update_button_states()
-        
-        # Show restart warning if services are running
-        status = self.get_status()
-        if status['backend_running'] or status['frontend_running']:
-            messagebox.showinfo(
-                "Restart Required",
-                "Settings have been applied. Please restart BrainDrive services for changes to take effect."
-            )
+        try:
+            status = self.get_status()
+            if status.get('backend_running') or status.get('frontend_running'):
+                messagebox.showinfo(
+                    "Restart Required",
+                    "Settings have been applied. Please restart BrainDrive services for changes to take effect."
+                )
+        except Exception:
+            pass

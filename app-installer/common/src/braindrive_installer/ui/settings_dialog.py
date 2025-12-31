@@ -1,10 +1,12 @@
+import copy
 import os
-import socket
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from urllib.parse import urlparse
 from braindrive_installer.ui.theme import Theme
 from typing import Callable
 from braindrive_installer.ui.settings_manager import BrainDriveSettingsManager
+from braindrive_installer.core.port_selector import is_port_available
 
 class BrainDriveSettingsDialog:
     """Settings configuration dialog for BrainDrive."""
@@ -278,7 +280,7 @@ class BrainDriveSettingsDialog:
         """Validate current settings and update status"""
         try:
             # Create temporary settings for validation
-            temp_settings = self.settings_manager.settings.copy()
+            temp_settings = copy.deepcopy(self.settings_manager.settings)
             
             # Update with current values
             temp_settings.setdefault('installation', {})
@@ -293,6 +295,12 @@ class BrainDriveSettingsDialog:
             temp_manager.settings = temp_settings
             
             issues = temp_manager.validate_settings()
+            issues.extend(self._collect_port_availability_issues(
+                temp_settings['network']['backend_host'],
+                temp_settings['network']['backend_port'],
+                temp_settings['network']['frontend_host'],
+                temp_settings['network']['frontend_port'],
+            ))
             
             if issues:
                 self.widgets['status_label'].config(text=f"⚠ Issues: {'; '.join(issues[:2])}", foreground="orange")
@@ -306,9 +314,76 @@ class BrainDriveSettingsDialog:
         finally:
             self._schedule_port_indicator_update()
 
+    def _normalize_probe_host(self, host: str) -> str:
+        host = (host or "").strip()
+        if not host:
+            return ""
+        if "://" in host:
+            parsed = urlparse(host)
+            host = parsed.hostname or host
+        return host.strip()
+
+    def _collect_port_availability_issues(
+        self,
+        backend_host: str,
+        backend_port: int,
+        frontend_host: str,
+        frontend_port: int,
+    ) -> list[str]:
+        issues: list[str] = []
+        current_network = self.settings_manager.settings.get("network", {}) if self.settings_manager else {}
+        current_backend_host = current_network.get("backend_host")
+        current_backend_port = current_network.get("backend_port")
+        current_frontend_host = current_network.get("frontend_host")
+        current_frontend_port = current_network.get("frontend_port")
+
+        issues.extend(
+            self._check_port_availability(
+                "Backend",
+                backend_host,
+                backend_port,
+                current_backend_host,
+                current_backend_port,
+            )
+        )
+        issues.extend(
+            self._check_port_availability(
+                "Frontend",
+                frontend_host,
+                frontend_port,
+                current_frontend_host,
+                current_frontend_port,
+            )
+        )
+        return issues
+
+    def _check_port_availability(
+        self,
+        label: str,
+        host: str,
+        port: int,
+        current_host: str,
+        current_port: int,
+    ) -> list[str]:
+        if not isinstance(port, int) or not (1024 <= port <= 65535):
+            return []
+        if not isinstance(host, str) or not host.strip():
+            return []
+        if host == current_host and port == current_port:
+            return []
+        probe_host = self._normalize_probe_host(host)
+        if not probe_host:
+            return []
+        try:
+            if not is_port_available(port, probe_host):
+                return [f"{label} port {port} is in use; stop the service using it or choose another"]
+        except Exception:
+            return []
+        return []
+
     def _check_port_usage(self, host: str, port_value) -> str:
         """Return 'open', 'closed', or 'unknown' depending on port availability."""
-        host = (host or "").strip()
+        host = self._normalize_probe_host(host)
         if not host:
             return "unknown"
         try:
@@ -318,17 +393,12 @@ class BrainDriveSettingsDialog:
         except (TypeError, ValueError):
             return "unknown"
 
-        probe_host = host
-        if host in {"0.0.0.0", "::", "[::]"}:
-            probe_host = "127.0.0.1"
-
         try:
-            with socket.create_connection((probe_host, port), timeout=0.5):
-                return "open"
-        except socket.timeout:
-            return "closed"
-        except OSError:
-            return "closed"
+            if is_port_available(port, host):
+                return "closed"
+            return "open"
+        except Exception:
+            return "unknown"
 
     def _set_port_indicator(self, name: str, status: str) -> None:
         indicator = self.port_indicators.get(name)
