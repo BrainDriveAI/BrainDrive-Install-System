@@ -333,7 +333,7 @@ BrainDrive/
 
 # Downloaded installers and packages
 downloads/
-installers/
+/installers/
 
 # User data and preferences
 user_data/
