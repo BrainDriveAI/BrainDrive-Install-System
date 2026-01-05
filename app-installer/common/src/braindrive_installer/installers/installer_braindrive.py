@@ -1286,7 +1286,7 @@ class BrainDriveInstaller(BaseInstaller):
         port_part = f":{port}" if port else ""
         return f"http://{browse_host}{port_part}"
 
-    def _wait_for_backend_ready(self, host, port, timeout=20):
+    def _wait_for_backend_ready(self, host, port, timeout=120):
         """Poll the backend until it responds or timeout elapses."""
         endpoints = ["/health", "/api/health", "/status", "/docs", "/openapi.json", "/"]
         start_time = time.time()

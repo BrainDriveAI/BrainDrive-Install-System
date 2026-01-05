@@ -240,7 +240,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Version Information
 
-**Current Version:** 1.0.4  
+**Current Version:** 1.0.5  
 **BrainDrive Compatibility:** Latest  
 **Last Updated:** February 2025
 

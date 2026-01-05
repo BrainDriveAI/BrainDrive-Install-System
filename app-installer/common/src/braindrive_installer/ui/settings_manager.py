@@ -62,7 +62,7 @@ class BrainDriveSettingsManager:
         """Get default settings configuration"""
         backend_port, frontend_port = self._choose_default_ports()
         return {
-            "version": "1.0.4",
+            "version": "1.0.5",
             "last_modified": datetime.utcnow().isoformat() + "Z",
             "network": {
                 "backend_host": "localhost",
