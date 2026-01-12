@@ -26,6 +26,9 @@ hiddenimports = []
 datas += collect_data_files('tkinter')
 datas += collect_data_files('PIL')
 
+# SSL certificates for HTTPS downloads (critical for macOS bundled apps)
+datas += collect_data_files('certifi')
+
 # Helper to add full directory trees (assets, templates, etc.)
 def add_directory(source: Path, target_root: str) -> None:
     if not source.exists():
@@ -101,6 +104,7 @@ hiddenimports += [
     'urllib.parse',
     'urllib.request',
     'urllib.error',
+    'certifi',  # SSL certificates for HTTPS downloads
 ]
 
 # Hidden imports for conda/git operations

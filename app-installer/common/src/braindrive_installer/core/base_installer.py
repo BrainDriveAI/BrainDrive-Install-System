@@ -122,21 +122,48 @@ class BaseInstaller(ABC):
 
     def check_node_available(self):
         """
-        Check if Node.js and npm are available on the system.
+        Check if Node.js and npm are available on the system or will be installed via conda.
         :return: Boolean indicating Node.js availability
         """
+        # First check system PATH
         node_available = PlatformUtils.is_command_available('node')
         npm_cmd = PlatformUtils.get_npm_executable_name()
         npm_available = PlatformUtils.is_command_available(npm_cmd)
-        return node_available and npm_available
+        if node_available and npm_available:
+            return True
+        
+        # Check if node exists in the conda environment path
+        import os
+        if hasattr(self, 'config') and self.config:
+            env_path = getattr(self.config, 'env_path', None)
+            if env_path:
+                if PlatformUtils.get_os_type() == 'windows':
+                    node_in_env = os.path.exists(os.path.join(env_path, 'node.exe'))
+                else:
+                    node_in_env = os.path.exists(os.path.join(env_path, 'bin', 'node'))
+                if node_in_env:
+                    return True
+        
+        return False
 
     def check_conda_available(self):
         """
-        Check if Conda is available on the system.
+        Check if Conda is available on the system or installed locally.
         :return: Boolean indicating Conda availability
         """
+        # First check system PATH
         conda_cmd = PlatformUtils.get_conda_executable_name()
-        return PlatformUtils.is_command_available(conda_cmd)
+        if PlatformUtils.is_command_available(conda_cmd):
+            return True
+        
+        # Check if conda exists at the configured installation path
+        import os
+        if hasattr(self, 'config') and self.config:
+            conda_exe = getattr(self.config, 'conda_exe', None)
+            if conda_exe and os.path.exists(conda_exe):
+                return True
+        
+        return False
 
     def get_system_requirements_status(self):
         """
