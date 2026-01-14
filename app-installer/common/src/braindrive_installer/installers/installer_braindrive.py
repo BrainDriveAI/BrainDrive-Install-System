@@ -179,22 +179,18 @@ class BrainDriveInstaller(BaseInstaller):
     def check_requirements(self):
         """
         Check if all pre-installation requirements are met:
-        - Git available
-        - Node.js and npm available
-        - Conda available
+        - Conda available (either in PATH or installed by MinicondaInstaller)
         - Sufficient disk space
+        
+        Note: Git and Node.js are installed by the conda environment setup,
+        so we don't require them to be pre-installed.
         """
         try:
             requirements_status = self.get_system_requirements_status()
             
             missing_requirements = []
             
-            if not requirements_status['git_available']:
-                missing_requirements.append("Git")
-            
-            if not requirements_status['node_available']:
-                missing_requirements.append("Node.js and npm")
-            
+            # Only check for conda - Git and Node.js will be installed via conda env
             if not requirements_status['conda_available']:
                 missing_requirements.append("Conda/Miniconda")
             
@@ -425,14 +421,37 @@ class BrainDriveInstaller(BaseInstaller):
                 self.log_status("Frontend directory not found", "error")
                 return False
             
-            # Install npm dependencies
+            # Install npm dependencies using conda environment
             package_json = os.path.join(self.frontend_path, "package.json")
             if os.path.exists(package_json):
                 self.log_status("Installing frontend dependencies...", "info")
                 
-                success = self.node_manager.install_dependencies(self.frontend_path)
-                if not success:
-                    self.log_status("Failed to install frontend dependencies", "error")
+                # Use conda run to execute npm in the correct environment
+                env_path = os.path.join(self.config.miniconda_path, "envs", self.env_name)
+                npm_install_cmd = [
+                    self.config.conda_exe,
+                    "run", "--prefix", env_path,
+                    "npm", "install", "--no-audit", "--no-fund"
+                ]
+                
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        npm_install_cmd,
+                        cwd=self.frontend_path,
+                        capture_output=True,
+                        text=True,
+                        timeout=900,  # 15 minutes
+                        **PlatformUtils.create_no_window_flags()
+                    )
+                    if result.returncode != 0:
+                        self.log_status(f"Failed to install frontend dependencies: {result.stderr}", "error")
+                        return False
+                except subprocess.TimeoutExpired:
+                    self.log_status("npm install timed out", "error")
+                    return False
+                except Exception as e:
+                    self.log_status(f"Failed to install frontend dependencies: {str(e)}", "error")
                     return False
                 
                 self.log_status("Frontend dependencies installed successfully", "info")
@@ -614,10 +633,12 @@ class BrainDriveInstaller(BaseInstaller):
             if self.process_manager.is_process_running("braindrive_frontend"):
                 self.log_status("Frontend server is already running", "info")
             else:
-                # Start frontend server
+                # Start frontend server using conda run (npm is in the conda environment)
                 self.log_status("Starting frontend server...", "info")
-                npm_cmd = PlatformUtils.get_npm_executable_name()
-                frontend_cmd = [npm_cmd, "run", "dev", "--", "--host", self.frontend_host, "--port", str(self.frontend_port)]
+                frontend_cmd = [
+                    conda_cmd, "run", "--prefix", self.env_prefix,
+                    "npm", "run", "dev", "--", "--host", self.frontend_host, "--port", str(self.frontend_port)
+                ]
 
                 success, error_msg = self.process_manager.start_process(
                     "braindrive_frontend",

@@ -14,7 +14,7 @@ def create_version_info():
     # Version information
     version_major = 1
     version_minor = 0
-    version_patch = 5
+    version_patch = 6
     version_build = 0
     
     version_string = f"{version_major}.{version_minor}.{version_patch}.{version_build}"
@@ -79,9 +79,9 @@ def get_version_info():
     return {
         'major': 1,
         'minor': 0,
-        'patch': 5,
+        'patch': 6,
         'build': 0,
-        'string': '1.0.5.0'
+        'string': '1.0.6.0'
     }
 
 def update_version(major=None, minor=None, patch=None, build=None):

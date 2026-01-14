@@ -15,10 +15,10 @@ class InstallerLogger:
     """Centralized logging for the BrainDrive Installer."""
     
     def __init__(self, log_dir=None):
-        # Default log directory sits alongside the running executable/script.
+        # Default log directory - use a writable location.
+        # On macOS DMG or read-only locations, fall back to user directories.
         if log_dir is None:
-            base_dir = Path(PlatformUtils.get_executable_directory())
-            log_dir = base_dir / "logs"
+            log_dir = self._get_writable_log_dir()
 
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -28,6 +28,60 @@ class InstallerLogger:
         self.log_file = self.log_dir / f"braindrive_installer_{timestamp}.log"
         
         self.setup_logging()
+    
+    @staticmethod
+    def _get_writable_log_dir() -> Path:
+        """Find a writable directory for logs, with fallbacks for read-only locations."""
+        
+        # First try: alongside the executable (works for installed apps)
+        exe_dir = Path(PlatformUtils.get_executable_directory())
+        
+        # On macOS, check if we're running from a DMG or .app bundle in a read-only location
+        if sys.platform == "darwin":
+            exe_str = str(exe_dir)
+            # Running from DMG volume or inside app bundle
+            if "/Volumes/" in exe_str or "/Contents/MacOS" in exe_str:
+                # Use macOS standard logs directory
+                mac_log_dir = Path.home() / "Library" / "Logs" / "BrainDriveInstaller"
+                try:
+                    mac_log_dir.mkdir(parents=True, exist_ok=True)
+                    # Test if writable
+                    test_file = mac_log_dir / ".write_test"
+                    test_file.write_text("test")
+                    test_file.unlink()
+                    return mac_log_dir
+                except (PermissionError, OSError):
+                    pass
+        
+        # Second try: use the installer data directory (has fallback logic)
+        try:
+            data_dir = Path(PlatformUtils.get_installer_data_dir())
+            log_dir = data_dir / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            # Test if writable
+            test_file = log_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()
+            return log_dir
+        except (PermissionError, OSError):
+            pass
+        
+        # Third try: executable directory (original behavior)
+        primary_log_dir = exe_dir / "logs"
+        try:
+            primary_log_dir.mkdir(parents=True, exist_ok=True)
+            test_file = primary_log_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()
+            return primary_log_dir
+        except (PermissionError, OSError):
+            pass
+        
+        # Final fallback: temp directory
+        import tempfile
+        temp_log_dir = Path(tempfile.gettempdir()) / "BrainDriveInstaller" / "logs"
+        temp_log_dir.mkdir(parents=True, exist_ok=True)
+        return temp_log_dir
     
     def setup_logging(self):
         """Configure logging with both file and console handlers."""

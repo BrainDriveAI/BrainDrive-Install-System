@@ -6,30 +6,14 @@ echo "BrainDrive Installer - macOS Build"
 echo "========================================"
 echo
 
-# Resolve preferred Python (favor active conda env)
-PYTHON_EXEC="$(command -v python || true)"
-if [ -n "$CONDA_PREFIX" ] && [ -x "$CONDA_PREFIX/bin/python" ]; then
-  PYTHON_EXEC="$CONDA_PREFIX/bin/python"
-fi
-if [ -z "$PYTHON_EXEC" ]; then
-  PYTHON_EXEC="$(command -v python3 || true)"
-fi
-if [ -z "$PYTHON_EXEC" ]; then
-    echo "❌ Error: Python 3 is not installed"
-    echo "Please install Python 3.11 or later and try again."
-    exit 1
-fi
-
-echo "✅ Python found"
-"$PYTHON_EXEC" --version
-
 # Resolve repo directories relative to this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="${SCRIPT_DIR}/.."
-COMMON_DIR="${REPO_ROOT}/common"
+REPO_ROOT="${SCRIPT_DIR}/../.."
+COMMON_DIR="${SCRIPT_DIR}/../common"
 SRC_DIR="${COMMON_DIR}/src"
 PKG_DIR="${SRC_DIR}/braindrive_installer"
 MAIN_SCRIPT="${PKG_DIR}/ui/main_interface.py"
+ENV_FILE="${REPO_ROOT}/environment.macos.yml"
 
 # Validate main script exists
 if [ ! -f "${MAIN_SCRIPT}" ]; then
@@ -41,59 +25,72 @@ fi
 
 echo "✅ Found main_interface.py at ${MAIN_SCRIPT}"
 
-# Create build environment
-echo
-echo "🔧 Creating build environment..."
-if [ -d "build_env" ]; then
-    echo "Removing existing build environment..."
-    rm -rf build_env
-fi
-
-"$PYTHON_EXEC" -m venv build_env
-if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to create virtual environment"
+# Check if conda is available
+if ! command -v conda &> /dev/null; then
+    echo "❌ Error: conda is not installed"
+    echo "Please install Miniconda or Anaconda and try again."
     exit 1
 fi
 
-echo "✅ Virtual environment created"
+echo "✅ Conda found: $(conda --version)"
 
-# Activate virtual environment
+# Create or update conda environment
+CONDA_ENV_NAME="BrainDriveInstallerBuild"
 echo
-echo "🔧 Activating build environment..."
-source build_env/bin/activate
+echo "🔧 Setting up conda environment: ${CONDA_ENV_NAME}..."
+
+# Check if the environment exists
+if conda env list | grep -q "^${CONDA_ENV_NAME} "; then
+    echo "Updating existing conda environment..."
+    conda env update -n "${CONDA_ENV_NAME}" -f "${ENV_FILE}" --prune
+else
+    echo "Creating new conda environment..."
+    conda env create -n "${CONDA_ENV_NAME}" -f "${ENV_FILE}"
+fi
+
 if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to activate virtual environment"
+    echo "❌ Error: Failed to create/update conda environment"
     exit 1
 fi
 
-echo "✅ Build environment activated"
+echo "✅ Conda environment ready"
 
-# Upgrade pip
+# Activate conda environment
 echo
-echo "🔧 Upgrading pip..."
-python -m pip install --upgrade pip
+echo "🔧 Activating conda environment..."
+eval "$(conda shell.bash hook)"
+conda activate "${CONDA_ENV_NAME}"
 
-# Install PyInstaller and dependencies
+if [ $? -ne 0 ]; then
+    echo "❌ Error: Failed to activate conda environment"
+    exit 1
+fi
+
+echo "✅ Conda environment activated"
+echo "Python: $(python --version)"
+echo "Location: $(which python)"
+
+# Verify tkinter is working
 echo
-echo "🔧 Installing build dependencies..."
+echo "🔧 Verifying tkinter..."
+python -c "import tkinter; print('tkinter OK')" 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ Error: tkinter is not working in this Python installation"
+    echo "Please ensure the conda environment has tk installed."
+    exit 1
+fi
+echo "✅ tkinter verified"
+
+# Install PyInstaller (might not be in conda env)
+echo
+echo "🔧 Installing PyInstaller..."
 pip install pyinstaller>=6.0.0
 if [ $? -ne 0 ]; then
     echo "❌ Error: Failed to install PyInstaller"
-    cleanup_and_exit 1
+    exit 1
 fi
 
 echo "✅ PyInstaller installed"
-
-# Install project requirements
-echo
-echo "🔧 Installing project requirements..."
-pip install -r "${SCRIPT_DIR}/requirements-macos.txt"
-if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to install project requirements"
-    cleanup_and_exit 1
-fi
-
-echo "✅ Project requirements installed"
 
 # Clean previous build
 echo
@@ -108,7 +105,7 @@ if [ ! -f "${ICON_FILE}" ]; then
         echo "Using braindrive.png as icon"
     else
         echo "❌ Error: No icon file found (braindriveai.icns or braindrive.png)"
-        cleanup_and_exit 1
+        exit 1
     fi
 fi
 
@@ -124,7 +121,7 @@ BUILD_STATUS=$?
 popd >/dev/null
 if [ ${BUILD_STATUS} -ne 0 ]; then
     echo "❌ Error: PyInstaller build failed"
-    cleanup_and_exit 1
+    exit 1
 fi
 
 # Check if build was successful
@@ -200,23 +197,13 @@ if [ -d "${APP_BUNDLE}" ]; then
     
 else
     echo "❌ Build failed! App bundle not found."
-    cleanup_and_exit 1
+    exit 1
 fi
 
-# Cleanup function
-cleanup_and_exit() {
-    echo
-    echo "🧹 Cleaning up build environment..."
-    deactivate 2>/dev/null || true
-    rm -rf build_env
-    exit $1
-}
-
-# Cleanup
+# Cleanup (conda environments persist, just deactivate)
 echo
-echo "🧹 Cleaning up build environment..."
-deactivate
-rm -rf build_env
+echo "🧹 Deactivating conda environment..."
+conda deactivate 2>/dev/null || true
 
 echo
 echo "========================================"

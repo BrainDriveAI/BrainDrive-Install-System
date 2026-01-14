@@ -1,7 +1,19 @@
 import os
+import platform
 import threading
 import urllib.request
 import subprocess
+import ssl
+try:
+    import certifi
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    # Fallback: try system certificates, or disable verification as last resort
+    try:
+        SSL_CONTEXT = ssl.create_default_context()
+    except Exception:
+        SSL_CONTEXT = ssl._create_unverified_context()
+
 from braindrive_installer.core.base_installer import BaseInstaller
 from braindrive_installer.core.platform_utils import PlatformUtils
 from braindrive_installer.core.installer_logger import get_installer_logger
@@ -15,15 +27,25 @@ class MinicondaInstaller(BaseInstaller):
         
         # Cross-platform installer configuration
         os_type = PlatformUtils.get_os_type()
+        machine_arch = platform.machine().lower()  # 'arm64' for Apple Silicon, 'x86_64' for Intel
+        
         if os_type == 'windows':
             self.installer_filename = "MinicondaInstaller.exe"
             self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
         elif os_type == 'macos':
             self.installer_filename = "MinicondaInstaller.sh"
-            self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+            # Detect Apple Silicon (arm64) vs Intel (x86_64)
+            if machine_arch == 'arm64':
+                self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh"
+            else:
+                self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
         else:  # linux
             self.installer_filename = "MinicondaInstaller.sh"
-            self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+            # Also handle ARM Linux (e.g., Raspberry Pi, AWS Graviton)
+            if machine_arch == 'aarch64' or machine_arch == 'arm64':
+                self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"
+            else:
+                self.miniconda_url = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
         
         self.installer_path = PlatformUtils.join_paths(self.config.base_path, self.installer_filename)
         
@@ -59,13 +81,15 @@ class MinicondaInstaller(BaseInstaller):
 
         try:
             self.logger.info("Miniconda not found, proceeding with installation")
-            # Ensure the base path exists
+            # Ensure the base path exists (for the installer script download)
             self.log_status(f"Creating base directory: {os.path.dirname(self.installer_path)}")
             self.create_directory_safely(os.path.dirname(self.installer_path))
             
-            # Ensure miniconda installation directory exists
-            self.log_status(f"Creating Miniconda directory: {self.miniconda_path}")
-            self.create_directory_safely(self.miniconda_path)
+            # Remove any existing miniconda directory - installer wants to create it fresh
+            if os.path.exists(self.miniconda_path):
+                self.log_status(f"Removing existing Miniconda directory: {self.miniconda_path}")
+                import shutil
+                shutil.rmtree(self.miniconda_path)
             
             self.download_installer()
 
@@ -138,7 +162,10 @@ class MinicondaInstaller(BaseInstaller):
                 self.log_status(f"Downloading Miniconda from: {self.miniconda_url}")
                 self.log_status(f"Saving to: {self.installer_path}")
                 
-                urllib.request.urlretrieve(self.miniconda_url, self.installer_path)
+                # Use SSL context with certifi certificates for macOS compatibility
+                with urllib.request.urlopen(self.miniconda_url, context=SSL_CONTEXT) as response:
+                    with open(self.installer_path, 'wb') as out_file:
+                        out_file.write(response.read())
                 
                 # Verify download
                 if os.path.exists(self.installer_path):
