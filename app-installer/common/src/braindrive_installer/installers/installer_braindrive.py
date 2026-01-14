@@ -441,7 +441,8 @@ class BrainDriveInstaller(BaseInstaller):
                         cwd=self.frontend_path,
                         capture_output=True,
                         text=True,
-                        timeout=900  # 15 minutes
+                        timeout=900,  # 15 minutes
+                        **PlatformUtils.create_no_window_flags()
                     )
                     if result.returncode != 0:
                         self.log_status(f"Failed to install frontend dependencies: {result.stderr}", "error")
