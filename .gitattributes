@@ -1,0 +1,9 @@
+# Mark binary files so git doesn't mangle them
+*.dmg binary
+*.icns binary
+*.png binary
+*.exe binary
+*.app binary
+*.pkg binary
+*.zip binary
+*.tar.gz binary
