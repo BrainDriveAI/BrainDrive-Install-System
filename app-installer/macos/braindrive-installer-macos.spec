@@ -212,6 +212,7 @@ app = BUNDLE(
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSAppleScriptEnabled': False,
+        'CFBundleIconFile': 'braindriveai',
         'CFBundleDocumentTypes': [],
         'NSHighResolutionCapable': 'True',
         'LSMinimumSystemVersion': '10.14.0',
