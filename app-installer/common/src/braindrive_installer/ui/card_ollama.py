@@ -1,9 +1,10 @@
-import os
 import sys
 import threading
 import time
 import urllib.request
 import subprocess
+import tempfile
+import ssl
 from tkinter import messagebox
 from braindrive_installer.ui.base_card import BaseCard
 import tkinter as tk
@@ -14,10 +15,20 @@ import socket
 from braindrive_installer.ui.ButtonStateManager import ButtonStateManager
 from braindrive_installer.utils.DiskSpaceChecker import DiskSpaceChecker
 from braindrive_installer.utils.helper_image import HelperImage
+from braindrive_installer.core.platform_utils import PlatformUtils
 from pathlib import Path
 from importlib import resources
 from io import BytesIO
 from braindrive_installer.core.installer_logger import get_installer_logger
+
+try:
+    import certifi
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    try:
+        SSL_CONTEXT = ssl.create_default_context()
+    except Exception:
+        SSL_CONTEXT = ssl._create_unverified_context()
 
 class Ollama(BaseCard):
     def __init__(self):
@@ -28,6 +39,19 @@ class Ollama(BaseCard):
         )
         self.installed = False
         self.logger = get_installer_logger()
+
+    def _get_download_target(self):
+        os_type = PlatformUtils.get_os_type()
+        if os_type == "windows":
+            return os_type, "https://ollama.com/download/OllamaSetup.exe", "OllamaSetup.exe"
+        if os_type == "macos":
+            return os_type, "https://ollama.com/download/Ollama.dmg", "Ollama.dmg"
+        return os_type, None, None
+
+    def _get_download_path(self, installer_name: str) -> Path:
+        download_dir = Path(tempfile.gettempdir()) / "BrainDriveInstaller" / "downloads"
+        download_dir.mkdir(parents=True, exist_ok=True)
+        return download_dir / installer_name
 
     def is_port_open(self, port=11434):
         """
@@ -50,28 +74,41 @@ class Ollama(BaseCard):
                     0,
                 )
 
-                # Define the URL and target path for the installer
-                ollama_url = "https://ollama.com/download/OllamaSetup.exe"
-                installer_name = "OllamaSetup.exe"
-                installer_path = os.path.join(os.getcwd(), installer_name)  # Save in current directory
+                os_type, ollama_url, installer_name = self._get_download_target()
+                if not ollama_url or not installer_name:
+                    raise RuntimeError(
+                        f"Ollama automatic install is not supported on {os_type}. "
+                        "Please install Ollama manually from https://ollama.com/download"
+                    )
+                installer_path = self._get_download_path(installer_name)
+                self.logger.info(f"Downloading Ollama from {ollama_url} to {installer_path}")
 
                 # Download the installer
-                with urllib.request.urlopen(ollama_url) as response, open(installer_path, 'wb') as out_file:
-                    data = response.read()
-                    out_file.write(data)
+                with urllib.request.urlopen(ollama_url, context=SSL_CONTEXT, timeout=120) as response, open(installer_path, 'wb') as out_file:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out_file.write(chunk)
 
                 self.config.status_updater.update_status(
                         "Running Installer...",
-                        "Running the Ollama installer. Follow the on-screen instructions.",
+                        "Launching the Ollama installer. Follow the on-screen instructions.",
                         50,
                     )
 
-                # Run the installer
-                subprocess.Popen(installer_path, shell=True)
+                if os_type == "windows":
+                    subprocess.Popen([str(installer_path)], shell=False)
+                    install_msg = "The Ollama installer should be visible soon."
+                elif os_type == "macos":
+                    subprocess.Popen(["open", str(installer_path)], shell=False)
+                    install_msg = "The Ollama DMG should open in Finder. Complete the install from the mounted disk."
+                else:
+                    raise RuntimeError(f"Unsupported platform for Ollama install: {os_type}")
 
                 self.config.status_updater.update_status(
                         "Ollama Installation Started",
-                        "The Ollama install inferface should be visible soon.",
+                        install_msg,
                         100,
                     )
                 self.installed = True

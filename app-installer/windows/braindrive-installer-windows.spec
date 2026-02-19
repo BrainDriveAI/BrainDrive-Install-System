@@ -23,6 +23,7 @@ hiddenimports = []
 # Tkinter / Pillow runtime assets
 datas += collect_data_files('tkinter')
 datas += collect_data_files('PIL')
+datas += collect_data_files('certifi')
 
 # Helper to add full directory trees (assets, templates, etc.)
 def add_directory(source: Path, target_root: str) -> None:
@@ -83,6 +84,7 @@ hiddenimports += [
     'urllib.parse',
     'urllib.request',
     'urllib.error',
+    'certifi',
 ]
 
 # Hidden imports for conda/git operations
